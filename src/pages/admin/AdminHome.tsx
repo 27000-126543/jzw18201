@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Clock, MapPin, User } from 'lucide-react'
+import { AlertTriangle, Clock, MapPin, User, UserPlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
 import { STATUS_LABELS, DEPARTMENT_LABELS, SERVICE_TYPE_LABELS } from '@/types'
@@ -107,13 +107,19 @@ export default function AdminHome() {
             </div>
 
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <span className="text-sm font-semibold text-hotel-dark">
                   {order.id}
                 </span>
                 <span className={cn('text-xs', statusBadgeClass[order.status])}>
                   {STATUS_LABELS[order.status]}
                 </span>
+                {order.isTimeout && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
+                    <AlertTriangle size={10} />
+                    超时
+                  </span>
+                )}
                 {order.priority === 'urgent' && (
                   <span className="flex items-center gap-1 text-xs text-hotel-coral font-medium">
                     <span className="w-1.5 h-1.5 rounded-full bg-hotel-coral" />
@@ -121,7 +127,7 @@ export default function AdminHome() {
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-3 text-sm text-hotel-muted">
+              <div className="flex items-center gap-3 text-sm text-hotel-muted flex-wrap">
                 <span className="flex items-center gap-1">
                   {SERVICE_TYPE_LABELS[order.type]}
                 </span>
@@ -133,6 +139,12 @@ export default function AdminHome() {
                   <User size={12} />
                   {order.guestName}
                 </span>
+                {order.handler && (
+                  <span className="flex items-center gap-1 text-hotel-dark">
+                    <UserPlus size={12} className="text-gold-600" />
+                    {order.handler}
+                  </span>
+                )}
               </div>
             </div>
 

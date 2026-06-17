@@ -2,6 +2,8 @@ export type ServiceType = 'dining' | 'amenities' | 'repair' | 'wakeUp' | 'dnd'
 export type OrderStatus = 'pending' | 'accepted' | 'inProgress' | 'completed' | 'cancelled'
 export type Department = 'housekeeping' | 'fandb' | 'engineering'
 export type Priority = 'normal' | 'urgent'
+export type TodoType = 'timeout' | 'badReview' | 'urgent'
+export type TodoStatus = 'open' | 'followedUp' | 'resolved'
 
 export interface DiningItem {
   id: string
@@ -47,6 +49,16 @@ export interface DNDDetail {
 
 export type OrderDetail = DiningDetail | AmenitiesDetail | RepairDetail | WakeUpDetail | DNDDetail
 
+export interface OrderLogEntry {
+  id: string
+  timestamp: string
+  fromStatus: OrderStatus | null
+  toStatus: OrderStatus
+  operator: string
+  note?: string
+  handlerAssigned?: string
+}
+
 export interface ServiceOrder {
   id: string
   roomId: string
@@ -61,8 +73,12 @@ export interface ServiceOrder {
   acceptedAt?: string
   completedAt?: string
   handler?: string
+  logs: OrderLogEntry[]
   rating?: number
   feedback?: string
+  reviewType?: 'service' | 'overall'
+  timeoutMinutes?: number
+  isTimeout?: boolean
 }
 
 export interface StayRecord {
@@ -73,20 +89,47 @@ export interface StayRecord {
   checkOut: string
   serviceOrders: string[]
   avgRating: number
+  isCurrent?: boolean
 }
 
 export interface GuestProfile {
   id: string
   name: string
   phone: string
-  preferences: string[]
+  preferences: PreferenceTag[]
   stayHistory: StayRecord[]
+}
+
+export interface PreferenceTag {
+  id: string
+  label: string
+  source: 'manual' | 'auto'
+  category: 'dining' | 'amenities' | 'sleep' | 'other'
+  count: number
+  lastUsed?: string
+}
+
+export interface ManagerTodo {
+  id: string
+  type: TodoType
+  title: string
+  description: string
+  roomId?: string
+  guestName?: string
+  orderId?: string
+  status: TodoStatus
+  createdAt: string
+  followedAt?: string
+  resolvedAt?: string
+  assignedManager?: string
+  relatedRating?: number
 }
 
 export interface DepartmentInfo {
   id: Department
   name: string
   orderTypes: ServiceType[]
+  handlers: string[]
 }
 
 export interface MenuCategory {
@@ -134,3 +177,12 @@ export const SERVICE_DEPARTMENT_MAP: Record<ServiceType, Department> = {
   wakeUp: 'housekeeping',
   dnd: 'housekeeping',
 }
+
+export const CATEGORY_LABELS: Record<PreferenceTag['category'], string> = {
+  dining: '餐饮偏好',
+  amenities: '备品偏好',
+  sleep: '作息偏好',
+  other: '其他偏好',
+}
+
+export const TIMEOUT_THRESHOLD = 15

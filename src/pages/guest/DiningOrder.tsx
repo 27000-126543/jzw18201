@@ -5,9 +5,7 @@ import { ArrowLeft, Plus, Minus, ShoppingCart, MessageSquare } from 'lucide-reac
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
 import { menuData } from '@/data/mock'
-import { generateOrderId } from '@/utils/time'
 import type { DiningItem } from '@/types'
-import { SERVICE_DEPARTMENT_MAP } from '@/types'
 
 export default function DiningOrder() {
   const { roomId } = useParams<{ roomId: string }>()
@@ -58,21 +56,16 @@ export default function DiningOrder() {
     }))
 
     addOrder({
-      id: generateOrderId(),
       roomId: roomId || '',
       guestName: guest?.name || '',
       guestId: guest?.id || '',
       type: 'dining',
-      status: 'pending',
-      department: SERVICE_DEPARTMENT_MAP.dining,
-      priority: 'normal',
       details: {
         type: 'dining',
         items: diningItems,
         totalAmount,
         note,
       },
-      createdAt: new Date().toISOString(),
     })
 
     navigate(`/guest/${roomId}/requests`)

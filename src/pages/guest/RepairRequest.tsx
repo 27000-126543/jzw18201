@@ -5,8 +5,6 @@ import { ArrowLeft, AlertTriangle, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
 import { repairIssueTypes } from '@/data/mock'
-import { generateOrderId } from '@/utils/time'
-import { SERVICE_DEPARTMENT_MAP } from '@/types'
 import type { Priority } from '@/types'
 
 export default function RepairRequest() {
@@ -26,21 +24,16 @@ export default function RepairRequest() {
     if (!issueType || !description) return
 
     addOrder({
-      id: generateOrderId(),
       roomId: roomId || '',
       guestName: guest?.name || '',
       guestId: guest?.id || '',
       type: 'repair',
-      status: 'pending',
-      department: SERVICE_DEPARTMENT_MAP.repair,
-      priority: urgency,
       details: {
         type: 'repair',
         issueType,
         description,
         urgency,
       },
-      createdAt: new Date().toISOString(),
     })
 
     navigate(`/guest/${roomId}/requests`)

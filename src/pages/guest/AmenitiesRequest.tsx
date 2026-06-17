@@ -5,8 +5,6 @@ import { ArrowLeft, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
 import { amenityOptions } from '@/data/mock'
-import { generateOrderId } from '@/utils/time'
-import { SERVICE_DEPARTMENT_MAP } from '@/types'
 
 export default function AmenitiesRequest() {
   const { roomId } = useParams<{ roomId: string }>()
@@ -32,20 +30,15 @@ export default function AmenitiesRequest() {
     if (selected.size === 0) return
 
     addOrder({
-      id: generateOrderId(),
       roomId: roomId || '',
       guestName: guest?.name || '',
       guestId: guest?.id || '',
       type: 'amenities',
-      status: 'pending',
-      department: SERVICE_DEPARTMENT_MAP.amenities,
-      priority: 'normal',
       details: {
         type: 'amenities',
         items: Array.from(selected),
         note,
       },
-      createdAt: new Date().toISOString(),
     })
 
     navigate(`/guest/${roomId}/requests`)

@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Clock, MapPin, User } from 'lucide-react'
+import { AlertTriangle, Clock, MapPin, User, UserPlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
 import { STATUS_LABELS, DEPARTMENT_LABELS, SERVICE_TYPE_LABELS } from '@/types'
@@ -31,11 +31,12 @@ const quickActions: Record<string, { label: string; targetStatus: OrderStatus; c
 export default function DepartmentView() {
   const { dept } = useParams<{ dept: Department }>()
   const getOrdersByDepartment = useHotelStore((s) => s.getOrdersByDepartment)
-  const updateOrderStatus = useHotelStore((s) => s.updateOrderStatus)
+  const transitionOrder = useHotelStore((s) => s.transitionOrder)
 
   const department = (dept ?? 'housekeeping') as Department
   const orders = getOrdersByDepartment(department)
   const deptLabel = DEPARTMENT_LABELS[department]
+  const operatorName = `${deptLabel}人员`
 
   return (
     <div>
@@ -59,11 +60,17 @@ export default function DepartmentView() {
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="text-sm font-semibold text-hotel-dark">{order.id}</span>
                   <span className={cn('text-xs', statusBadgeClass[order.status])}>
                     {STATUS_LABELS[order.status]}
                   </span>
+                  {order.isTimeout && (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
+                      <AlertTriangle size={10} />
+                      超时
+                    </span>
+                  )}
                   {order.priority === 'urgent' && (
                     <span className="flex items-center gap-1 text-xs text-hotel-coral font-medium">
                       <span className="w-1.5 h-1.5 rounded-full bg-hotel-coral" />
@@ -71,7 +78,7 @@ export default function DepartmentView() {
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3 text-sm text-hotel-muted">
+                <div className="flex items-center gap-3 text-sm text-hotel-muted flex-wrap">
                   <span>{SERVICE_TYPE_LABELS[order.type]}</span>
                   <span className="flex items-center gap-1">
                     <MapPin size={12} />
@@ -81,6 +88,12 @@ export default function DepartmentView() {
                     <User size={12} />
                     {order.guestName}
                   </span>
+                  {order.handler && (
+                    <span className="flex items-center gap-1 text-hotel-dark">
+                      <UserPlus size={12} className="text-gold-600" />
+                      {order.handler}
+                    </span>
+                  )}
                   <span className="flex items-center gap-1">
                     <Clock size={12} />
                     {timeAgo(order.createdAt)}
@@ -92,7 +105,7 @@ export default function DepartmentView() {
                 {(quickActions[order.status] ?? []).map((action) => (
                   <button
                     key={action.targetStatus}
-                    onClick={() => updateOrderStatus(order.id, action.targetStatus)}
+                    onClick={() => transitionOrder(order.id, action.targetStatus, operatorName)}
                     className={cn(
                       'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
                       action.className

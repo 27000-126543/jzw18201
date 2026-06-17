@@ -4,8 +4,6 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Clock, CalendarDays } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
-import { generateOrderId } from '@/utils/time'
-import { SERVICE_DEPARTMENT_MAP } from '@/types'
 
 export default function WakeUpService() {
   const { roomId } = useParams<{ roomId: string }>()
@@ -23,21 +21,16 @@ export default function WakeUpService() {
     if (!dateTime) return
 
     addOrder({
-      id: generateOrderId(),
       roomId: roomId || '',
       guestName: guest?.name || '',
       guestId: guest?.id || '',
       type: 'wakeUp',
-      status: 'pending',
-      department: SERVICE_DEPARTMENT_MAP.wakeUp,
-      priority: 'normal',
       details: {
         type: 'wakeUp',
         dateTime,
         repeat,
         note,
       },
-      createdAt: new Date().toISOString(),
     })
 
     navigate(`/guest/${roomId}/requests`)

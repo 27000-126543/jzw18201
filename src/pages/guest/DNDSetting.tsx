@@ -23,21 +23,16 @@ export default function DNDSetting() {
     if (!startTime || !endTime) return
 
     addOrder({
-      id: generateOrderId(),
       roomId: roomId || '',
       guestName: guest?.name || '',
       guestId: guest?.id || '',
       type: 'dnd',
-      status: 'pending',
-      department: SERVICE_DEPARTMENT_MAP.dnd,
-      priority: 'normal',
       details: {
         type: 'dnd',
         startTime,
         endTime,
         note,
       },
-      createdAt: new Date().toISOString(),
     })
 
     navigate(`/guest/${roomId}/requests`)
