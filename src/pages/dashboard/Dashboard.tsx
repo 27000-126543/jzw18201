@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Clock,
@@ -80,6 +80,8 @@ export default function Dashboard() {
   const getFilteredTodos = useHotelStore((s) => s.getFilteredTodos)
   const getTodoStatsByDepartment = useHotelStore((s) => s.getTodoStatsByDepartment)
   const getTodoStatsByManager = useHotelStore((s) => s.getTodoStatsByManager)
+  const getGuestBreakdownByDept = useHotelStore((s) => s.getGuestBreakdownByDept)
+  const getGuestBreakdownByManager = useHotelStore((s) => s.getGuestBreakdownByManager)
   const refreshTimeoutFlags = useHotelStore((s) => s.refreshTimeoutFlags)
   const orders = useHotelStore((s) => s.orders)
   const todos = useHotelStore((s) => s.todos)
@@ -165,6 +167,18 @@ export default function Dashboard() {
       resolved: source.filter((t) => t.status === 'resolved').length,
     }
   }, [dropdownFilteredTodos])
+
+  const riskBreakdown = useMemo(() => {
+    if (filterDepartment) {
+      return getGuestBreakdownByDept(filterDepartment)
+    }
+    if (filterManager) {
+      return getGuestBreakdownByManager(filterManager)
+    }
+    return []
+  }, [filterDepartment, filterManager, getGuestBreakdownByDept, getGuestBreakdownByManager])
+
+  const showRiskPanel = filterDepartment !== null || filterManager !== null
 
   useEffect(() => {
     if (visibleTodos.length === 0) return
@@ -397,9 +411,17 @@ export default function Dashboard() {
           <span className="text-gold-400">星辰酒店</span>{' '}
           <span className="text-gray-400 font-normal text-lg">前台大屏</span>
         </h1>
-        <div className="flex items-center gap-2 text-gray-500 text-sm">
-          <Clock size={16} />
-          {new Date(now).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/admin/inhouse')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-600/20 text-gold-400 border border-gold-600/40 hover:bg-gold-600/30 transition-colors text-sm font-medium"
+          >
+            📊 住中复盘
+          </button>
+          <div className="flex items-center gap-2 text-gray-500 text-sm">
+            <Clock size={16} />
+            {new Date(now).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+          </div>
         </div>
       </header>
 
@@ -626,6 +648,137 @@ export default function Dashboard() {
           </div>
         )}
       </motion.div>
+
+      {showRiskPanel && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="mb-8 bg-gray-800 rounded-2xl p-6 border border-red-700/30 overflow-hidden"
+        >
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={18} className="text-red-400" />
+              <h2 className="text-base font-semibold text-red-400">房间风险明细</h2>
+              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-900/50 text-red-300 border border-red-700/50">
+                {filterDepartment ? DEPARTMENT_LABELS[filterDepartment] : filterManager}
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                setFilterDepartment(null)
+                setFilterManager(null)
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-700 text-gray-300 border border-gray-600 hover:bg-gray-600 transition-colors"
+            >
+              ✕ 关闭
+            </button>
+          </div>
+
+          {riskBreakdown.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {riskBreakdown.map((item, idx) => {
+                const hasBadReview = item.orders.some((o) => (o.rating ?? 5) < 4)
+                const openTodos = item.todos.filter((t) => t.status === 'open').length
+                const followedTodos = item.todos.filter((t) => t.status === 'followedUp').length
+                const resolvedTodos = item.todos.filter((t) => t.status === 'resolved').length
+
+                let riskBadge
+                if (item.riskLevel === 'high') {
+                  riskBadge = { label: '🔴 高风险', className: 'bg-red-900/60 text-red-300 border-red-700/60' }
+                } else if (item.riskLevel === 'medium') {
+                  riskBadge = { label: '🟡 中风险', className: 'bg-amber-900/60 text-amber-300 border-amber-700/60' }
+                } else {
+                  riskBadge = { label: '🟢 低风险', className: 'bg-green-900/60 text-green-300 border-green-700/60' }
+                }
+
+                return (
+                  <motion.div
+                    key={`${item.guestId}-${item.stayId}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className={cn(
+                      'p-4 rounded-xl border transition-all',
+                      item.riskLevel === 'high'
+                        ? 'bg-red-900/20 border-red-800/50'
+                        : item.riskLevel === 'medium'
+                        ? 'bg-amber-900/20 border-amber-800/50'
+                        : 'bg-gray-750 border-gray-700'
+                    )}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg font-bold text-white">{item.guestName}</span>
+                          <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-gray-700 text-gray-300">
+                            {item.roomNumber}房
+                          </span>
+                          {hasBadReview && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-600 text-white">
+                              差评
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500 font-mono">Stay: {item.stayId}</div>
+                      </div>
+                      <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold border', riskBadge.className)}>
+                        {riskBadge.label}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gold-900/50 text-gold-300 border border-gold-700/50">
+                        📦 订单 {item.orders.length}
+                      </span>
+                      {openTodos > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-700 text-red-100">
+                          待处理 {openTodos}
+                        </span>
+                      )}
+                      {followedTodos > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-700 text-amber-100">
+                          已跟进 {followedTodos}
+                        </span>
+                      )}
+                      {resolvedTodos > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-700 text-green-100">
+                          已解决 {resolvedTodos}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/admin/guest/${item.guestId}?expandStay=${item.stayId}`}
+                        className="flex-1 flex items-center justify-center gap-1 px-2 py-2 rounded-lg text-xs font-medium bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
+                      >
+                        👤 客户档案
+                      </Link>
+                      <Link
+                        to={`/admin/todos?guestId=${item.guestId}&roomId=${item.roomNumber}&stayId=${item.stayId}&source=dashboard`}
+                        className="flex-1 flex items-center justify-center gap-1 px-2 py-2 rounded-lg text-xs font-medium bg-gold-900/40 text-gold-300 border border-gold-700/40 hover:bg-gold-900/60 transition-colors"
+                      >
+                        📋 入住待办
+                      </Link>
+                      <Link
+                        to="/admin/inhouse"
+                        className="flex-1 flex items-center justify-center gap-1 px-2 py-2 rounded-lg text-xs font-medium bg-blue-900/40 text-blue-300 border border-blue-700/40 hover:bg-blue-900/60 transition-colors"
+                      >
+                        📊 住中复盘
+                      </Link>
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500 text-sm">
+              暂无风险明细数据
+            </div>
+          )}
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-5 gap-6 mb-8">
         <div className="col-span-3 space-y-6">

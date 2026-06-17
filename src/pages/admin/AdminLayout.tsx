@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   User,
   Building2,
+  FileText,
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -44,6 +45,7 @@ export default function AdminLayout() {
     { to: '/admin/dept/engineering', icon: Wrench, label: '工程部', badge: 0 },
     { to: '/dashboard', icon: Monitor, label: '前台大屏', badge: 0 },
     { to: '/admin/todos', icon: Bell, label: '经理待办', badge: openTodoCount },
+    { to: '/admin/inhouse', icon: FileText, label: '住中复盘', badge: 0 },
     { to: '/admin/guest/G001', icon: UserCircle, label: '客户档案', badge: 0 },
   ]
 

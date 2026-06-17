@@ -52,9 +52,13 @@ interface HotelStore extends PersistedState {
   getTodosByOrder: (orderId: string) => ManagerTodo[]
   getTodosByGuest: (guestId: string) => ManagerTodo[]
   getTodosByStay: (roomId: string, stayId: string) => ManagerTodo[]
+  getTodosByStayId: (stayId: string) => ManagerTodo[]
   getTodoStatsByDepartment: () => { department: Department; label: string; open: number; followedUp: number; resolved: number; total: number }[]
   getTodoStatsByManager: () => { manager: string; open: number; followedUp: number; resolved: number; total: number }[]
   getReviewsForStay: (stayId: string) => { overall?: { rating: number; feedback?: string; subRatings?: Record<string, number>; reviewedAt: string }; services: { order: ServiceOrder; rating: number; feedback?: string }[] }
+  getInHouseRiskSummary: () => { guests: { guestId: string; guestName: string; rooms: { roomNumber: string; stayId: string; orders: number; pending: number; completed: number; avgRating: number; badReviews: number; openTodos: number }[]; isCurrent: boolean }[]; totalPending: number; totalOpenTodos: number; totalBadReviews: number }
+  getGuestBreakdownByDept: (department: Department) => { guestId: string; guestName: string; roomNumber: string; stayId: string; orders: ServiceOrder[]; todos: ManagerTodo[]; riskLevel: 'high' | 'medium' | 'low' }[]
+  getGuestBreakdownByManager: (manager: string) => { guestId: string; guestName: string; roomNumber: string; stayId: string; orders: ServiceOrder[]; todos: ManagerTodo[]; riskLevel: 'high' | 'medium' | 'low' }[]
 }
 
 function buildPreferenceFromOrder(order: ServiceOrder): Omit<PreferenceTag, 'id'>[] {
@@ -137,6 +141,23 @@ function buildTodo(partial: Omit<ManagerTodo, 'id' | 'createdAt' | 'status' | 'a
   }
 }
 
+function findStayIdForOrderId(guests: typeof initialGuests, orderId: string): string | undefined {
+  for (const g of guests) {
+    for (const s of g.stayHistory) {
+      if (s.serviceOrders.includes(orderId)) return s.id
+    }
+  }
+  return undefined
+}
+
+function findStayIdForRoom(guests: typeof initialGuests, roomId: string): string | undefined {
+  for (const g of guests) {
+    const s = g.stayHistory.find((st) => st.isCurrent && st.roomNumber === roomId)
+    if (s) return s.id
+  }
+  return undefined
+}
+
 export const useHotelStore = create<HotelStore>()(
   persist(
     (set, get) => ({
@@ -152,6 +173,7 @@ export const useHotelStore = create<HotelStore>()(
           guestId: 'G001',
           guestName: '张明远',
           orderId: 'ORD-001',
+          stayId: 'S001',
           handlerName: undefined,
           department: 'fandb',
           sourceDetail: '餐饮部未及时接单',
@@ -164,6 +186,7 @@ export const useHotelStore = create<HotelStore>()(
           guestId: 'G002',
           guestName: '李雪琴',
           orderId: 'ORD-002',
+          stayId: 'S003',
           handlerName: '陈师傅',
           department: 'engineering',
           sourceDetail: '工程部处理缓慢（紧急工单）',
@@ -176,6 +199,7 @@ export const useHotelStore = create<HotelStore>()(
           guestId: 'G003',
           guestName: '王建国',
           orderId: 'ORD-011',
+          stayId: 'S005',
           relatedRating: 3,
           handlerName: '小李',
           department: 'fandb',
@@ -242,6 +266,7 @@ export const useHotelStore = create<HotelStore>()(
           )
           let newTodos = state.todos
           if (rating < 4 && order) {
+            const stayId = findStayIdForOrderId(state.guests, order.id)
             newTodos = [
               buildTodo({
                 type: 'badReview',
@@ -251,6 +276,7 @@ export const useHotelStore = create<HotelStore>()(
                 guestId: order.guestId,
                 guestName: order.guestName,
                 orderId: order.id,
+                stayId,
                 relatedRating: rating,
                 handlerName: order.handler,
                 department: order.department,
@@ -322,6 +348,7 @@ export const useHotelStore = create<HotelStore>()(
                 roomId,
                 guestId: targetGuest.id,
                 guestName: targetGuest.name,
+                stayId: targetStay.id,
                 relatedRating: rating,
                 sourceDetail: `整体入住评价(${rating}星)：${feedback || '客人不满意'}`,
               }),
@@ -449,6 +476,7 @@ export const useHotelStore = create<HotelStore>()(
             if (isTimeout && !o.isTimeout && o.status === 'pending') {
               const existingTodo = state.todos.find((t) => t.orderId === o.id && t.type === 'timeout' && t.status !== 'resolved')
               if (!existingTodo) {
+                const stayId = findStayIdForOrderId(state.guests, o.id)
                 newTodos = [
                   buildTodo({
                     type: 'timeout',
@@ -458,6 +486,7 @@ export const useHotelStore = create<HotelStore>()(
                     guestId: o.guestId,
                     guestName: o.guestName,
                     orderId: o.id,
+                    stayId,
                     handlerName: o.handler,
                     department: o.department,
                     sourceDetail: `${DEPARTMENT_LABELS[o.department]}${o.handler ? `-${o.handler}` : ''}：${o.priority === 'urgent' ? '紧急' : ''}工单未及时响应`,
@@ -552,7 +581,9 @@ export const useHotelStore = create<HotelStore>()(
 
       getTodosByGuest: (guestId) => get().todos.filter((t) => t.guestId === guestId),
 
-      getTodosByStay: (roomId, _stayId) => get().todos.filter((t) => t.roomId === roomId),
+      getTodosByStay: (_roomId, stayId) => get().todos.filter((t) => t.stayId === stayId),
+
+      getTodosByStayId: (stayId) => get().todos.filter((t) => t.stayId === stayId),
 
       getTodoStatsByDepartment: () => {
         const { todos } = get()
@@ -609,6 +640,119 @@ export const useHotelStore = create<HotelStore>()(
         })
 
         return { overall, services }
+      },
+
+      getInHouseRiskSummary: () => {
+        const { orders, guests, todos } = get()
+        const resultGuests: { guestId: string; guestName: string; rooms: { roomNumber: string; stayId: string; orders: number; pending: number; completed: number; avgRating: number; badReviews: number; openTodos: number }[]; isCurrent: boolean }[] = []
+        let totalPending = 0
+        let totalOpenTodos = 0
+        let totalBadReviews = 0
+
+        guests.forEach((g) => {
+          const currentStays = g.stayHistory.filter((s) => s.isCurrent)
+          if (currentStays.length === 0) return
+          const rooms = currentStays.map((stay) => {
+            const roomOrders = orders.filter((o) => stay.serviceOrders.includes(o.id))
+            const roomTodos = todos.filter((t) => t.stayId === stay.id)
+            const ratedOrders = roomOrders.filter((o) => o.rating != null && o.reviewType === 'service')
+            const badReviews = ratedOrders.filter((o) => (o.rating || 0) < 4).length
+            const avgRating = ratedOrders.length > 0
+              ? ratedOrders.reduce((s, o) => s + (o.rating || 0), 0) / ratedOrders.length
+              : stay.overallRating ?? 0
+            const roomPending = roomOrders.filter((o) => o.status === 'pending' || o.status === 'accepted' || o.status === 'inProgress').length
+            totalPending += roomPending
+            totalBadReviews += badReviews
+            const openTodos = roomTodos.filter((t) => t.status === 'open').length
+            totalOpenTodos += openTodos
+            return {
+              roomNumber: stay.roomNumber,
+              stayId: stay.id,
+              orders: roomOrders.length,
+              pending: roomPending,
+              completed: roomOrders.filter((o) => o.status === 'completed').length,
+              avgRating: Math.round(avgRating * 10) / 10,
+              badReviews,
+              openTodos,
+            }
+          })
+          resultGuests.push({ guestId: g.id, guestName: g.name, rooms, isCurrent: true })
+        })
+
+        return { guests: resultGuests, totalPending, totalOpenTodos, totalBadReviews }
+      },
+
+      getGuestBreakdownByDept: (department) => {
+        const { orders, guests, todos } = get()
+        const deptTodos = todos.filter((t) => t.department === department)
+        const stayIds = new Set(deptTodos.map((t) => t.stayId).filter(Boolean))
+        const result: { guestId: string; guestName: string; roomNumber: string; stayId: string; orders: ServiceOrder[]; todos: ManagerTodo[]; riskLevel: 'high' | 'medium' | 'low' }[] = []
+
+        guests.forEach((g) => {
+          g.stayHistory.forEach((stay) => {
+            if (!stay.isCurrent) return
+            if (stayIds.size > 0 && !stayIds.has(stay.id)) {
+              const hasDirectDeptTodo = deptTodos.some((t) => t.roomId === stay.roomNumber && t.guestId === g.id)
+              if (!hasDirectDeptTodo) return
+            }
+            const stayOrders = orders.filter((o) => o.department === department && stay.serviceOrders.includes(o.id))
+            const stayTodos = todos.filter((t) => ((t.stayId === stay.id || (t.roomId === stay.roomNumber && t.guestId === g.id)) && t.department === department))
+            if (stayOrders.length === 0 && stayTodos.length === 0 && stayIds.size > 0) return
+            const openTodos = stayTodos.filter((t) => t.status === 'open').length
+            const badReviews = stayOrders.filter((o) => (o.rating ?? 5) < 4).length
+            let riskLevel: 'high' | 'medium' | 'low' = 'low'
+            if (openTodos >= 2 || badReviews >= 1) riskLevel = 'high'
+            else if (openTodos === 1 || badReviews === 0) riskLevel = 'medium'
+            if (stayOrders.length === 0 && stayTodos.length === 0) return
+            result.push({
+              guestId: g.id,
+              guestName: g.name,
+              roomNumber: stay.roomNumber,
+              stayId: stay.id,
+              orders: stayOrders,
+              todos: stayTodos,
+              riskLevel,
+            })
+          })
+        })
+        return result.sort((a, b) => {
+          const order = { high: 0, medium: 1, low: 2 }
+          return order[a.riskLevel] - order[b.riskLevel]
+        })
+      },
+
+      getGuestBreakdownByManager: (manager) => {
+        const { orders, guests, todos } = get()
+        const managerTodos = todos.filter((t) => t.assignedManager === manager)
+        const stayIds = new Set(managerTodos.map((t) => t.stayId).filter(Boolean))
+        const result: { guestId: string; guestName: string; roomNumber: string; stayId: string; orders: ServiceOrder[]; todos: ManagerTodo[]; riskLevel: 'high' | 'medium' | 'low' }[] = []
+
+        guests.forEach((g) => {
+          g.stayHistory.forEach((stay) => {
+            if (!stay.isCurrent) return
+            const stayTodos = todos.filter((t) => t.assignedManager === manager && (t.stayId === stay.id || (t.roomId === stay.roomNumber && t.guestId === g.id)))
+            const stayOrders = orders.filter((o) => stay.serviceOrders.includes(o.id))
+            if (stayTodos.length === 0) return
+            const openTodos = stayTodos.filter((t) => t.status === 'open').length
+            const badReviews = stayOrders.filter((o) => (o.rating ?? 5) < 4).length
+            let riskLevel: 'high' | 'medium' | 'low' = 'low'
+            if (openTodos >= 2 || badReviews >= 1) riskLevel = 'high'
+            else if (openTodos === 1) riskLevel = 'medium'
+            result.push({
+              guestId: g.id,
+              guestName: g.name,
+              roomNumber: stay.roomNumber,
+              stayId: stay.id,
+              orders: stayOrders,
+              todos: stayTodos,
+              riskLevel,
+            })
+          })
+        })
+        return result.sort((a, b) => {
+          const order = { high: 0, medium: 1, low: 2 }
+          return order[a.riskLevel] - order[b.riskLevel]
+        })
       },
     }),
     {

@@ -6,6 +6,7 @@ import DepartmentView from '@/pages/admin/DepartmentView'
 import OrderDetail from '@/pages/admin/OrderDetail'
 import GuestProfile from '@/pages/admin/GuestProfile'
 import ManagerTodos from '@/pages/admin/ManagerTodos'
+import InHouseReview from '@/pages/admin/InHouseReview'
 import Dashboard from '@/pages/dashboard/Dashboard'
 import GuestLayout from '@/components/GuestLayout'
 import GuestHome from '@/pages/guest/GuestHome'
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminHome />} />
           <Route path="todos" element={<ManagerTodos />} />
+          <Route path="inhouse" element={<InHouseReview />} />
           <Route path="dept/:dept" element={<DepartmentView />} />
           <Route path="order/:orderId" element={<OrderDetail />} />
           <Route path="guest/:guestId" element={<GuestProfile />} />

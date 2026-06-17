@@ -135,6 +135,7 @@ export interface ManagerTodo {
   guestId?: string
   guestName?: string
   orderId?: string
+  stayId?: string
   handlerName?: string
   department?: Department
   status: TodoStatus

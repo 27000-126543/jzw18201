@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   Bell,
   AlertTriangle,
@@ -13,6 +13,7 @@ import {
   FileText,
   Filter,
   X,
+  ArrowLeft,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
@@ -154,6 +155,8 @@ function TodoCard({ todo }: { todo: ManagerTodo }) {
 }
 
 export default function ManagerTodos() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const todos = useHotelStore((s) => s.todos)
   const getFilteredTodos = useHotelStore((s) => s.getFilteredTodos)
 
@@ -161,6 +164,87 @@ export default function ManagerTodos() {
   const [filterRoom, setFilterRoom] = useState<string>('all')
   const [filterType, setFilterType] = useState<TodoType | 'all'>('all')
   const [filterStatus, setFilterStatus] = useState<TodoStatus | 'all'>('all')
+  const [filterStayId, setFilterStayId] = useState<string | null>(null)
+  const [urlSource, setUrlSource] = useState<string | null>(null)
+  const [showHintBanner, setShowHintBanner] = useState(false)
+  const [isUrlApplied, setIsUrlApplied] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const guestId = params.get('guestId')
+    const roomId = params.get('roomId')
+    const stayId = params.get('stayId')
+    const source = params.get('source')
+
+    let hasFilters = false
+    if (guestId) {
+      setFilterGuest(guestId)
+      hasFilters = true
+    }
+    if (roomId) {
+      setFilterRoom(roomId)
+      hasFilters = true
+    }
+    if (stayId) {
+      setFilterStayId(stayId)
+      hasFilters = true
+    }
+    if (source) {
+      setUrlSource(source)
+      setShowHintBanner(true)
+    }
+    setIsUrlApplied(true)
+  }, [location.search])
+
+  const syncUrl = (guest: string, room: string, stay: string | null, type: string, status: string) => {
+    const params = new URLSearchParams()
+    if (guest !== 'all') params.set('guestId', guest)
+    if (room !== 'all') params.set('roomId', room)
+    if (stay) params.set('stayId', stay)
+    if (type !== 'all') params.set('type', type)
+    if (status !== 'all') params.set('status', status)
+    if (urlSource) params.set('source', urlSource)
+    const queryString = params.toString()
+    navigate(queryString ? `?${queryString}` : window.location.pathname, { replace: true })
+  }
+
+  const handleFilterChange = (type: 'guest' | 'room' | 'type' | 'status', value: string) => {
+    let newGuest = filterGuest
+    let newRoom = filterRoom
+    let newType = filterType
+    let newStatus = filterStatus
+
+    if (type === 'guest') {
+      newGuest = value
+      setFilterGuest(value)
+    } else if (type === 'room') {
+      newRoom = value
+      setFilterRoom(value)
+    } else if (type === 'type') {
+      newType = value as TodoType | 'all'
+      setFilterType(value as TodoType | 'all')
+    } else if (type === 'status') {
+      newStatus = value as TodoStatus | 'all'
+      setFilterStatus(value as TodoStatus | 'all')
+    }
+
+    syncUrl(newGuest, newRoom, filterStayId, newType, newStatus)
+  }
+
+  const handleClearStayFilter = () => {
+    setFilterStayId(null)
+    syncUrl(filterGuest, filterRoom, null, filterType, filterStatus)
+  }
+
+  const handleClearFilters = () => {
+    setFilterGuest('all')
+    setFilterRoom('all')
+    setFilterType('all')
+    setFilterStatus('all')
+    setFilterStayId(null)
+    setShowHintBanner(false)
+    navigate(window.location.pathname, { replace: true })
+  }
 
   const uniqueGuests = useMemo(() => {
     const map = new Map<string, string>()
@@ -181,7 +265,7 @@ export default function ManagerTodos() {
   }, [todos])
 
   const filteredTodos = useMemo(() => {
-    if (filterGuest === 'all' && filterRoom === 'all' && filterType === 'all' && filterStatus === 'all') {
+    if (filterGuest === 'all' && filterRoom === 'all' && filterType === 'all' && filterStatus === 'all' && !filterStayId) {
       return todos
     }
     return getFilteredTodos({
@@ -190,9 +274,10 @@ export default function ManagerTodos() {
       status: filterStatus,
     }).filter((t) => {
       if (filterGuest !== 'all' && t.guestId !== filterGuest) return false
+      if (filterStayId && t.stayId !== filterStayId) return false
       return true
     })
-  }, [todos, filterGuest, filterRoom, filterType, filterStatus, getFilteredTodos])
+  }, [todos, filterGuest, filterRoom, filterType, filterStatus, filterStayId, getFilteredTodos])
 
   const timeoutTodos = filteredTodos.filter((t) => t.type === 'timeout' && t.status !== 'resolved')
   const badReviewTodos = filteredTodos.filter((t) => t.type === 'badReview' && t.status !== 'resolved')
@@ -200,17 +285,46 @@ export default function ManagerTodos() {
   const openTodos = filteredTodos.filter((t) => t.status !== 'resolved')
   const resolvedTodos = filteredTodos.filter((t) => t.status === 'resolved')
 
-  const hasActiveFilters = filterGuest !== 'all' || filterRoom !== 'all' || filterType !== 'all' || filterStatus !== 'all'
+  const hasActiveFilters = filterGuest !== 'all' || filterRoom !== 'all' || filterType !== 'all' || filterStatus !== 'all' || filterStayId !== null
 
   return (
     <div className="space-y-6">
+      {showHintBanner && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-blue-700">
+            <span>🔍</span>
+            <span className="text-sm font-medium">
+              已自动筛选：{filterRoom !== 'all' ? `来自${filterRoom}房间的` : ''}入住待办
+              {filterStayId && `（入住单: ${filterStayId}）`}
+            </span>
+          </div>
+          <button
+            onClick={() => setShowHintBanner(false)}
+            className="text-blue-500 hover:text-blue-700 text-sm"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-hotel-dark">经理待办中心</h2>
-          <p className="text-sm text-hotel-muted mt-1">
-            共 <span className="font-semibold text-red-600">{openTodos.length}</span> 条待处理事项
-            （超时预警 {timeoutTodos.length} 条，差评跟进 {badReviewTodos.length} 条）
-          </p>
+        <div className="flex items-center gap-3">
+          {urlSource === 'guest' && filterGuest !== 'all' && (
+            <Link
+              to={`/admin/guest/${filterGuest}${filterStayId ? `?expandStay=${filterStayId}` : ''}`}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors font-medium"
+            >
+              <ArrowLeft size={14} />
+              返回客户档案
+            </Link>
+          )}
+          <div>
+            <h2 className="text-xl font-bold text-hotel-dark">经理待办中心</h2>
+            <p className="text-sm text-hotel-muted mt-1">
+              共 <span className="font-semibold text-red-600">{openTodos.length}</span> 条待处理事项
+              （超时预警 {timeoutTodos.length} 条，差评跟进 {badReviewTodos.length} 条）
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="px-4 py-2 rounded-xl bg-red-50 border border-red-100">
@@ -233,7 +347,7 @@ export default function ManagerTodos() {
           <Filter size={16} className="text-hotel-muted shrink-0" />
           <select
             value={filterGuest}
-            onChange={(e) => setFilterGuest(e.target.value)}
+            onChange={(e) => handleFilterChange('guest', e.target.value)}
             className="text-sm border border-hotel-border rounded-lg px-3 py-1.5 bg-white text-hotel-dark focus:outline-none focus:ring-2 focus:ring-gold-300"
           >
             <option value="all">全部客人</option>
@@ -243,7 +357,7 @@ export default function ManagerTodos() {
           </select>
           <select
             value={filterRoom}
-            onChange={(e) => setFilterRoom(e.target.value)}
+            onChange={(e) => handleFilterChange('room', e.target.value)}
             className="text-sm border border-hotel-border rounded-lg px-3 py-1.5 bg-white text-hotel-dark focus:outline-none focus:ring-2 focus:ring-gold-300"
           >
             <option value="all">全部房间</option>
@@ -253,7 +367,7 @@ export default function ManagerTodos() {
           </select>
           <select
             value={filterType}
-            onChange={(e) => setFilterType(e.target.value as TodoType | 'all')}
+            onChange={(e) => handleFilterChange('type', e.target.value)}
             className="text-sm border border-hotel-border rounded-lg px-3 py-1.5 bg-white text-hotel-dark focus:outline-none focus:ring-2 focus:ring-gold-300"
           >
             <option value="all">全部类型</option>
@@ -263,7 +377,7 @@ export default function ManagerTodos() {
           </select>
           <select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as TodoStatus | 'all')}
+            onChange={(e) => handleFilterChange('status', e.target.value)}
             className="text-sm border border-hotel-border rounded-lg px-3 py-1.5 bg-white text-hotel-dark focus:outline-none focus:ring-2 focus:ring-gold-300"
           >
             <option value="all">全部状态</option>
@@ -271,14 +385,20 @@ export default function ManagerTodos() {
             <option value="followedUp">已跟进</option>
             <option value="resolved">已解决</option>
           </select>
+          {filterStayId && (
+            <div className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-purple-100 text-purple-700 border border-purple-200 font-medium">
+              入住单: {filterStayId}
+              <button
+                onClick={handleClearStayFilter}
+                className="ml-1 hover:text-purple-900"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
           {hasActiveFilters && (
             <button
-              onClick={() => {
-                setFilterGuest('all')
-                setFilterRoom('all')
-                setFilterType('all')
-                setFilterStatus('all')
-              }}
+              onClick={handleClearFilters}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors font-medium"
             >
               <X size={12} />

@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useState, useMemo, useEffect } from 'react'
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Phone,
@@ -40,16 +40,26 @@ const todoStatusConfig: Record<string, { label: string; bgClass: string; textCla
   resolved: { label: '已解决', bgClass: 'bg-green-100', textClass: 'text-green-700' },
 }
 
-function StayReviewCard({ stay, guestId }: { stay: StayRecord; guestId: string }) {
-  const [expanded, setExpanded] = useState(stay.isCurrent ?? false)
+function StayReviewCard({
+  stay,
+  guestId,
+  expanded,
+  onToggleExpand,
+}: {
+  stay: StayRecord
+  guestId: string
+  expanded: boolean
+  onToggleExpand: () => void
+}) {
+  const navigate = useNavigate()
   const getReviewsForStay = useHotelStore((s) => s.getReviewsForStay)
-  const getTodosByRoom = useHotelStore((s) => s.getTodosByRoom)
+  const getTodosByStayId = useHotelStore((s) => s.getTodosByStayId)
   const orders = useHotelStore((s) => s.orders)
   const followUpTodo = useHotelStore((s) => s.followUpTodo)
   const resolveTodo = useHotelStore((s) => s.resolveTodo)
 
   const stayReviews = useMemo(() => getReviewsForStay(stay.id), [stay.id, getReviewsForStay])
-  const roomTodos = useMemo(() => getTodosByRoom(stay.roomNumber), [stay.roomNumber, getTodosByRoom])
+  const stayTodos = useMemo(() => getTodosByStayId(stay.id), [stay.id, getTodosByStayId])
 
   const serviceRatingCount = stayReviews.services.length
   const stayOrders = useMemo(
@@ -68,7 +78,7 @@ function StayReviewCard({ stay, guestId }: { stay: StayRecord; guestId: string }
     )}>
       <div
         className="flex items-center gap-3 p-5 cursor-pointer hover:bg-gray-50/50 transition-colors"
-        onClick={() => setExpanded(!expanded)}
+        onClick={onToggleExpand}
       >
         <div className={cn(
           'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
@@ -98,7 +108,7 @@ function StayReviewCard({ stay, guestId }: { stay: StayRecord; guestId: string }
               </span>
             )}
             <span>{serviceRatingCount} 项服务评分</span>
-            <span>{roomTodos.length} 条相关待办</span>
+            <span>{stayTodos.length} 条相关待办</span>
           </div>
         </div>
         <div className="shrink-0">
@@ -115,6 +125,18 @@ function StayReviewCard({ stay, guestId }: { stay: StayRecord; guestId: string }
             className="overflow-hidden"
           >
             <div className="px-5 pb-5 space-y-5 border-t border-hotel-border/60 pt-4">
+              <div className="flex justify-end">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    navigate(`/admin/todos?guestId=${guestId}&roomId=${stay.roomNumber}&stayId=${stay.id}&source=guest`)
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-gold-100 text-gold-700 hover:bg-gold-200 transition-colors border border-gold-200"
+                >
+                  📋 查看入住待办
+                </button>
+              </div>
+
               {stayReviews.overall && (
                 <div className="p-4 rounded-xl bg-gold-50/40 border border-gold-200">
                   <div className="flex items-center justify-between mb-3">
@@ -221,14 +243,14 @@ function StayReviewCard({ stay, guestId }: { stay: StayRecord; guestId: string }
                 </div>
               )}
 
-              {roomTodos.length > 0 && (
+              {stayTodos.length > 0 && (
                 <div>
                   <h4 className="text-sm font-semibold text-hotel-dark mb-3 flex items-center gap-2">
                     <Bell size={14} className="text-red-500" />
-                    相关待办（{roomTodos.length}）
+                    相关待办（{stayTodos.length}）
                   </h4>
                   <div className="space-y-2">
-                    {roomTodos.map((todo) => {
+                    {stayTodos.map((todo) => {
                       const stCfg = todoStatusConfig[todo.status]
                       return (
                         <div
@@ -259,11 +281,34 @@ function StayReviewCard({ stay, guestId }: { stay: StayRecord; guestId: string }
                                 <span>处理人: {todo.handlerName}</span>
                               )}
                             </div>
+                            <div className="flex items-center gap-3 mt-2 text-xs">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  navigate(`/admin/todos?guestId=${guestId}&roomId=${stay.roomNumber}&stayId=${stay.id}&source=guest`)
+                                }}
+                                className="text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-1"
+                              >
+                                ⤴️ 前往待办中心
+                              </button>
+                              {todo.orderId && (
+                                <Link
+                                  to={`/admin/order/${todo.orderId}`}
+                                  className="text-gold-600 hover:text-gold-700 font-medium inline-flex items-center gap-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  查看工单
+                                </Link>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             {todo.status === 'open' && (
                               <button
-                                onClick={() => followUpTodo(todo.id, '当班经理')}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  followUpTodo(todo.id, '当班经理')
+                                }}
                                 className="px-2.5 py-1 text-xs rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors font-medium"
                               >
                                 跟进
@@ -271,7 +316,10 @@ function StayReviewCard({ stay, guestId }: { stay: StayRecord; guestId: string }
                             )}
                             {todo.status === 'followedUp' && (
                               <button
-                                onClick={() => resolveTodo(todo.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  resolveTodo(todo.id)
+                                }}
                                 className="px-2.5 py-1 text-xs rounded-lg bg-green-50 text-green-700 hover:bg-green-100 transition-colors font-medium inline-flex items-center gap-1"
                               >
                                 <CheckCircle2 size={12} />
@@ -323,8 +371,33 @@ function StayReviewCard({ stay, guestId }: { stay: StayRecord; guestId: string }
 
 export default function GuestProfile() {
   const { guestId } = useParams<{ guestId: string }>()
+  const navigate = useNavigate()
+  const location = useLocation()
   const getGuestById = useHotelStore((s) => s.getGuestById)
   const guest = getGuestById(guestId ?? '')
+
+  const [expandedStayId, setExpandedStayId] = useState<string | null>(() => {
+    const params = new URLSearchParams(location.search)
+    return params.get('expandStay')
+  })
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const expandStay = params.get('expandStay')
+    if (expandStay) {
+      setExpandedStayId(expandStay)
+    }
+  }, [location.search])
+
+  const handleToggleExpand = (stayId: string) => {
+    const newExpanded = expandedStayId === stayId ? null : stayId
+    setExpandedStayId(newExpanded)
+    if (newExpanded) {
+      navigate(`?expandStay=${newExpanded}`, { replace: true })
+    } else {
+      navigate(location.pathname, { replace: true })
+    }
+  }
 
   if (!guest) {
     return (
@@ -363,13 +436,21 @@ export default function GuestProfile() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-semibold text-hotel-dark">客户档案</h2>
-        <button
-          onClick={() => alert('偏好摘要导出功能演示')}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-hotel-border text-hotel-dark hover:bg-gray-50 transition-colors"
-        >
-          <Download size={16} />
-          导出偏好摘要
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/admin/inhouse')}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200"
+          >
+            📊 住中复盘
+          </button>
+          <button
+            onClick={() => alert('偏好摘要导出功能演示')}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-hotel-border text-hotel-dark hover:bg-gray-50 transition-colors"
+          >
+            <Download size={16} />
+            导出偏好摘要
+          </button>
+        </div>
       </div>
 
       <div className="card p-6 mb-6">
@@ -415,7 +496,13 @@ export default function GuestProfile() {
         </h3>
         <div className="space-y-3">
           {sortedStays.map((stay) => (
-            <StayReviewCard key={stay.id} stay={stay} guestId={guest.id} />
+            <StayReviewCard
+              key={stay.id}
+              stay={stay}
+              guestId={guest.id}
+              expanded={expandedStayId === stay.id || (expandedStayId === null && stay.isCurrent)}
+              onToggleExpand={() => handleToggleExpand(stay.id)}
+            />
           ))}
         </div>
       </div>
