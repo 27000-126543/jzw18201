@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ManagerTodo, OrderLogEntry, OrderStatus, Department, ServiceOrder, ServiceType, PreferenceTag } from '@/types'
-import { SERVICE_DEPARTMENT_MAP, TIMEOUT_THRESHOLD } from '@/types'
+import type { ManagerTodo, OrderLogEntry, OrderStatus, Department, ServiceOrder, ServiceType, PreferenceTag, StayRecord, OverallReview } from '@/types'
+import { SERVICE_DEPARTMENT_MAP, TIMEOUT_THRESHOLD, DEFAULT_MANAGER, DEPARTMENT_LABELS } from '@/types'
 import { initialOrders, initialGuests, roomGuestMap } from '@/data/mock'
 import { generateOrderId } from '@/utils/time'
 
@@ -9,6 +9,7 @@ interface PersistedState {
   orders: ServiceOrder[]
   guests: typeof initialGuests
   todos: ManagerTodo[]
+  overallReviews: OverallReview[]
   seedVersion: number
 }
 
@@ -34,16 +35,21 @@ interface HotelStore extends PersistedState {
   getFilteredOrders: () => ServiceOrder[]
   getGuestById: (guestId: string) => typeof initialGuests[number] | undefined
   getGuestByRoom: (roomId: string) => typeof initialGuests[number] | undefined
-  getCurrentStayForGuest: (guestId: string) => { stay: typeof initialGuests[number]['stayHistory'][number]; orders: ServiceOrder[] } | null
+  getCurrentStayForGuest: (guestId: string) => { stay: StayRecord; orders: ServiceOrder[] } | null
   getDepartmentStats: () => { department: Department; name: string; pending: number; inProgress: number; completed: number; avgResponseMin: number; timeoutCount: number }[]
   getPendingCount: () => number
   getTimeoutCount: () => number
   getAvgResponseMin: () => number
   getTodayOrderCount: () => number
   getOpenTodos: () => ManagerTodo[]
+  getFilteredTodos: (filter: { roomId?: string; type?: ManagerTodo['type'] | 'all'; status?: ManagerTodo['status'] | 'all' }) => ManagerTodo[]
   refreshTimeoutFlags: () => void
   addPreferenceFromOrder: (guestId: string, order: ServiceOrder) => void
   addGuestOrderToStay: (guestId: string, orderId: string) => void
+  getReviewsForGuest: (guestId: string) => { stay: StayRecord; type: 'overall' | 'service'; order?: ServiceOrder; rating: number; feedback?: string; createdAt: string }[]
+  getOverallReviewForStay: (stayId: string) => OverallReview | undefined
+  getTodosByRoom: (roomId: string) => ManagerTodo[]
+  getTodosByOrder: (orderId: string) => ManagerTodo[]
 }
 
 function buildPreferenceFromOrder(order: ServiceOrder): Omit<PreferenceTag, 'id'>[] {
@@ -116,33 +122,60 @@ function addLog(order: ServiceOrder, toStatus: OrderStatus, operator: string, ha
 
 const STORAGE_KEY = 'hotel-service-v2'
 
+function buildTodo(partial: Omit<ManagerTodo, 'id' | 'createdAt' | 'status' | 'assignedManager'> & { status?: ManagerTodo['status']; assignedManager?: string }): ManagerTodo {
+  return {
+    id: `TODO-${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}`,
+    createdAt: new Date().toISOString(),
+    status: 'open',
+    assignedManager: DEFAULT_MANAGER,
+    ...partial,
+  }
+}
+
 export const useHotelStore = create<HotelStore>()(
   persist(
     (set, get) => ({
       orders: initialOrders,
       guests: initialGuests,
+      overallReviews: [],
       todos: [
-        {
-          id: 'TODO-001', type: 'timeout', status: 'open',
+        buildTodo({
+          type: 'timeout',
           title: 'ORD-001 叫餐请求超时未处理',
           description: '801房 张明远 的皮蛋瘦肉粥+拿铁等待12分钟仍未接单',
-          roomId: '801', guestName: '张明远', orderId: 'ORD-001',
-          createdAt: new Date(Date.now() - 60000).toISOString(),
-        },
-        {
-          id: 'TODO-002', type: 'timeout', status: 'open',
+          roomId: '801',
+          guestId: 'G001',
+          guestName: '张明远',
+          orderId: 'ORD-001',
+          handlerName: undefined,
+          department: 'fandb',
+          sourceDetail: '餐饮部未及时接单',
+        }),
+        buildTodo({
+          type: 'timeout',
           title: 'ORD-002 紧急报修超时',
           description: '803房 李雪琴 的空调故障等待30分钟，需关注处理进度',
-          roomId: '803', guestName: '李雪琴', orderId: 'ORD-002',
-          createdAt: new Date(Date.now() - 60000 * 2).toISOString(),
-        },
-        {
-          id: 'TODO-003', type: 'badReview', status: 'open',
+          roomId: '803',
+          guestId: 'G002',
+          guestName: '李雪琴',
+          orderId: 'ORD-002',
+          handlerName: '陈师傅',
+          department: 'engineering',
+          sourceDetail: '工程部处理缓慢（紧急工单）',
+        }),
+        buildTodo({
+          type: 'badReview',
           title: 'ORD-011 3星差评需跟进',
           description: '805房 王建国 对扬州炒饭给出3星评价：炒饭偏咸了',
-          roomId: '805', guestName: '王建国', orderId: 'ORD-011', relatedRating: 3,
-          createdAt: new Date(Date.now() - 60000 * 200).toISOString(),
-        },
+          roomId: '805',
+          guestId: 'G003',
+          guestName: '王建国',
+          orderId: 'ORD-011',
+          relatedRating: 3,
+          handlerName: '小李',
+          department: 'fandb',
+          sourceDetail: '餐饮部-小李：扬州炒饭偏咸',
+        }),
       ],
       seedVersion: 1,
       activeFilter: { status: 'all', department: 'all', type: 'all' },
@@ -152,7 +185,7 @@ export const useHotelStore = create<HotelStore>()(
         set((state) => ({ activeFilter: { ...state.activeFilter, ...filter } })),
 
       resetStore: () => {
-        set({ orders: initialOrders, guests: initialGuests, seedVersion: Date.now() })
+        set({ orders: initialOrders, guests: initialGuests, overallReviews: [], seedVersion: Date.now() })
       },
 
       addOrder: (orderData) => {
@@ -198,25 +231,30 @@ export const useHotelStore = create<HotelStore>()(
 
       submitServiceReview: (orderId, rating, feedback) => {
         set((state) => {
+          const order = state.orders.find((o) => o.id === orderId)
           const updatedOrders = state.orders.map((o) =>
             o.id === orderId ? { ...o, rating, feedback, reviewType: 'service' as const } : o
           )
-          const order = state.orders.find((o) => o.id === orderId)
           let newTodos = state.todos
           if (rating < 4 && order) {
-            const todo: ManagerTodo = {
-              id: `TODO-${Date.now()}`,
-              type: 'badReview',
-              status: 'open',
-              title: `${order.id} ${rating}星差评需跟进`,
-              description: `${order.roomId}房 ${order.guestName} 给出${rating}星评价：${feedback || '无文字反馈'}`,
-              roomId: order.roomId,
-              guestName: order.guestName,
-              orderId: order.id,
-              relatedRating: rating,
-              createdAt: new Date().toISOString(),
-            }
-            newTodos = [todo, ...state.todos]
+            newTodos = [
+              buildTodo({
+                type: 'badReview',
+                title: `${order.id} ${rating}星差评需跟进`,
+                description: `${order.roomId}房 ${order.guestName} 给出${rating}星评价：${feedback || '无文字反馈'}`,
+                roomId: order.roomId,
+                guestId: order.guestId,
+                guestName: order.guestName,
+                orderId: order.id,
+                relatedRating: rating,
+                handlerName: order.handler,
+                department: order.department,
+                sourceDetail: order.handler
+                  ? `${DEPARTMENT_LABELS[order.department]}-${order.handler}：${feedback || '服务不满意'}`
+                  : `${DEPARTMENT_LABELS[order.department]}：${feedback || '服务不满意'}`,
+              }),
+              ...state.todos,
+            ]
           }
           return { orders: updatedOrders, todos: newTodos }
         })
@@ -224,41 +262,65 @@ export const useHotelStore = create<HotelStore>()(
 
       submitOverallReview: (roomId, rating, feedback, subRatings) => {
         set((state) => {
+          const now = new Date().toISOString()
           const guest = state.guests.find((g) => {
             const cur = g.stayHistory.find((s) => s.isCurrent)
             return cur && cur.roomNumber === roomId
           })
-          const roomOrders = state.orders.filter((o) => o.roomId === roomId)
-          const updatedOrders = state.orders.map((o) =>
-            o.roomId === roomId && !o.rating
-              ? { ...o, rating, feedback, reviewType: 'overall' as const }
-              : o
-          )
+          const currentStay = guest?.stayHistory.find((s) => s.isCurrent)
+          let newReviews = state.overallReviews
           let newTodos = state.todos
-          if (rating < 4 && guest) {
-            const todo: ManagerTodo = {
-              id: `TODO-${Date.now()}`,
-              type: 'badReview',
-              status: 'open',
-              title: `${roomId}房 整体入住${rating}星差评`,
-              description: `${guest.name} 对本次入住给出${rating}星：${feedback || '无文字反馈'}`,
-              roomId,
-              guestName: guest.name,
-              relatedRating: rating,
-              createdAt: new Date().toISOString(),
+          let updatedGuests = state.guests
+
+          if (guest && currentStay) {
+            const review: OverallReview = {
+              id: `REV-${Date.now()}`,
+              stayId: currentStay.id,
+              guestId: guest.id,
+              roomNumber: roomId,
+              rating,
+              feedback,
+              subRatings,
+              createdAt: now,
             }
-            newTodos = [todo, ...state.todos]
+            newReviews = [review, ...state.overallReviews]
+
+            updatedGuests = state.guests.map((g) => {
+              if (g.id !== guest.id) return g
+              return {
+                ...g,
+                stayHistory: g.stayHistory.map((s) =>
+                  s.isCurrent
+                    ? {
+                        ...s,
+                        overallRating: rating,
+                        overallFeedback: feedback,
+                        overallSubRatings: subRatings,
+                        overallReviewedAt: now,
+                        reviewSource: 'guest',
+                      }
+                    : s
+                ),
+              }
+            })
+
+            if (rating < 4) {
+              newTodos = [
+                buildTodo({
+                  type: 'badReview',
+                  title: `${roomId}房 整体入住${rating}星差评`,
+                  description: `${guest.name} 对本次入住给出${rating}星：${feedback || '无文字反馈'}`,
+                  roomId,
+                  guestId: guest.id,
+                  guestName: guest.name,
+                  relatedRating: rating,
+                  sourceDetail: `整体入住评价(${rating}星)：${feedback || '客人不满意'}`,
+                }),
+                ...state.todos,
+              ]
+            }
           }
-          const updatedGuests = guest ? state.guests.map((g) => {
-            if (g.id !== guest.id) return g
-            return {
-              ...g,
-              stayHistory: g.stayHistory.map((s) =>
-                s.isCurrent ? { ...s, avgRating: rating } : s
-              ),
-            }
-          }) : state.guests
-          return { orders: updatedOrders, guests: updatedGuests, todos: newTodos, _used: roomOrders, _subs: subRatings } as any
+          return { overallReviews: newReviews, guests: updatedGuests, todos: newTodos }
         })
       },
 
@@ -355,6 +417,16 @@ export const useHotelStore = create<HotelStore>()(
 
       getOpenTodos: () => get().todos.filter((t) => t.status !== 'resolved'),
 
+      getFilteredTodos: (filter) => {
+        const { todos } = get()
+        return todos.filter((t) => {
+          if (filter.roomId && t.roomId !== filter.roomId) return false
+          if (filter.type && filter.type !== 'all' && t.type !== filter.type) return false
+          if (filter.status && filter.status !== 'all' && t.status !== filter.status) return false
+          return true
+        })
+      },
+
       refreshTimeoutFlags: () =>
         set((state) => {
           const now = Date.now()
@@ -369,18 +441,21 @@ export const useHotelStore = create<HotelStore>()(
             if (isTimeout && !o.isTimeout && o.status === 'pending') {
               const existingTodo = state.todos.find((t) => t.orderId === o.id && t.type === 'timeout' && t.status !== 'resolved')
               if (!existingTodo) {
-                const todo: ManagerTodo = {
-                  id: `TODO-${Date.now()}-${o.id}`,
-                  type: 'timeout',
-                  status: 'open',
-                  title: `${o.id} ${o.priority === 'urgent' ? '紧急' : ''}工单超时未处理`,
-                  description: `${o.roomId}房 ${o.guestName} 的请求等待${Math.round(minutesElapsed)}分钟`,
-                  roomId: o.roomId,
-                  guestName: o.guestName,
-                  orderId: o.id,
-                  createdAt: new Date().toISOString(),
-                }
-                newTodos = [todo, ...newTodos]
+                newTodos = [
+                  buildTodo({
+                    type: 'timeout',
+                    title: `${o.id} ${o.priority === 'urgent' ? '紧急' : ''}工单超时未处理`,
+                    description: `${o.roomId}房 ${o.guestName} 的请求等待${Math.round(minutesElapsed)}分钟`,
+                    roomId: o.roomId,
+                    guestId: o.guestId,
+                    guestName: o.guestName,
+                    orderId: o.id,
+                    handlerName: o.handler,
+                    department: o.department,
+                    sourceDetail: `${DEPARTMENT_LABELS[o.department]}${o.handler ? `-${o.handler}` : ''}：${o.priority === 'urgent' ? '紧急' : ''}工单未及时响应`,
+                  }),
+                  ...newTodos,
+                ]
               }
             }
             return { ...o, isTimeout, timeoutMinutes }
@@ -427,6 +502,45 @@ export const useHotelStore = create<HotelStore>()(
             }
           }),
         })),
+
+      getReviewsForGuest: (guestId) => {
+        const { orders, guests, overallReviews } = get()
+        const guest = guests.find((g) => g.id === guestId)
+        if (!guest) return []
+        const result: { stay: StayRecord; type: 'overall' | 'service'; order?: ServiceOrder; rating: number; feedback?: string; createdAt: string }[] = []
+        guest.stayHistory.forEach((stay) => {
+          if (stay.overallRating != null && stay.overallReviewedAt) {
+            result.push({
+              stay,
+              type: 'overall',
+              rating: stay.overallRating,
+              feedback: stay.overallFeedback,
+              createdAt: stay.overallReviewedAt,
+            })
+          }
+          stay.serviceOrders.forEach((oid) => {
+            const order = orders.find((o) => o.id === oid)
+            if (order && order.rating != null && order.reviewType === 'service') {
+              result.push({
+                stay,
+                type: 'service',
+                order,
+                rating: order.rating,
+                feedback: order.feedback,
+                createdAt: order.completedAt || order.createdAt,
+              })
+            }
+          })
+        })
+        const _ = overallReviews
+        return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      },
+
+      getOverallReviewForStay: (stayId) => get().overallReviews.find((r) => r.stayId === stayId),
+
+      getTodosByRoom: (roomId) => get().todos.filter((t) => t.roomId === roomId),
+
+      getTodosByOrder: (orderId) => get().todos.filter((t) => t.orderId === orderId),
     }),
     {
       name: STORAGE_KEY,
@@ -434,6 +548,7 @@ export const useHotelStore = create<HotelStore>()(
         orders: state.orders,
         guests: state.guests,
         todos: state.todos,
+        overallReviews: state.overallReviews,
         seedVersion: state.seedVersion,
       }),
       onRehydrateStorage: () => (state) => {

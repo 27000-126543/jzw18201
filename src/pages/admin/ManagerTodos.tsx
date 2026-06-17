@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { Link } from 'react-router-dom'
 import {
   Bell,
   AlertTriangle,
@@ -7,11 +8,16 @@ import {
   Clock,
   User,
   ArrowRightLeft,
+  ExternalLink,
+  Building2,
+  Wrench,
+  FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
 import { timeAgo } from '@/utils/time'
 import type { ManagerTodo, TodoStatus, TodoType } from '@/types'
+import { DEPARTMENT_LABELS } from '@/types'
 
 const todoTypeConfig: Record<TodoType, { icon: typeof AlertTriangle; label: string; bgClass: string; textClass: string }> = {
   timeout: { icon: AlertTriangle, label: '超时预警', bgClass: 'bg-red-50', textClass: 'text-red-600' },
@@ -53,35 +59,79 @@ function TodoCard({ todo }: { todo: ManagerTodo }) {
               </span>
             </div>
             <p className="text-sm text-hotel-muted mb-3">{todo.description}</p>
-            <div className="flex items-center gap-4 flex-wrap text-xs text-hotel-muted">
-              {todo.roomId && (
-                <span className="inline-flex items-center gap-1">
+
+            <div className="space-y-2 mb-3">
+              <div className="flex items-center gap-4 flex-wrap text-xs">
+                <span className="inline-flex items-center gap-1 text-gold-700 font-medium">
                   <User size={12} />
-                  {todo.roomId}房 {todo.guestName}
+                  👤 责任人: {todo.assignedManager}
                 </span>
+                {todo.orderId && todo.handlerName && (
+                  <span className="inline-flex items-center gap-1 text-blue-700">
+                    <Wrench size={12} />
+                    🛠️ 处理人: {todo.handlerName}
+                  </span>
+                )}
+                {todo.department && (
+                  <span className="inline-flex items-center gap-1 text-purple-700">
+                    <Building2 size={12} />
+                    🏢 责任部门: {DEPARTMENT_LABELS[todo.department]}
+                  </span>
+                )}
+                {todo.roomId && (
+                  <span className="inline-flex items-center gap-1 text-hotel-muted">
+                    <User size={12} />
+                    {todo.roomId}房 {todo.guestName}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1 text-hotel-muted">
+                  <Clock size={12} />
+                  {timeAgo(todo.createdAt)}
+                </span>
+                {todo.relatedRating && (
+                  <span className="inline-flex items-center gap-1 text-amber-600 font-medium">
+                    {'⭐'.repeat(todo.relatedRating)}
+                  </span>
+                )}
+              </div>
+              {todo.sourceDetail && (
+                <div className="text-xs text-hotel-muted/80 bg-gray-50 rounded-lg px-3 py-2 border border-hotel-border/60">
+                  <span className="inline-flex items-center gap-1">
+                    <FileText size={11} />
+                    📝 来源线索: {todo.sourceDetail}
+                  </span>
+                </div>
               )}
-              <span className="inline-flex items-center gap-1">
-                <Clock size={12} />
-                {timeAgo(todo.createdAt)}
-              </span>
-              {todo.relatedRating && (
-                <span className="inline-flex items-center gap-1 text-amber-600 font-medium">
-                  {'⭐'.repeat(todo.relatedRating)}
-                </span>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {todo.guestId && (
+                <Link
+                  to={`/admin/guest/${todo.guestId}`}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-gold-50 text-gold-700 hover:bg-gold-100 transition-colors font-medium border border-gold-200"
+                >
+                  <User size={12} />
+                  查看客户档案
+                  <ExternalLink size={10} />
+                </Link>
               )}
-              {todo.assignedManager && todo.status !== 'open' && (
-                <span className="inline-flex items-center gap-1 text-gold-700">
-                  <ArrowRightLeft size={12} />
-                  {todo.assignedManager}
-                </span>
+              {todo.orderId && (
+                <Link
+                  to={`/admin/order/${todo.orderId}`}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors font-medium border border-blue-200"
+                >
+                  <FileText size={12} />
+                  查看工单
+                  <ExternalLink size={10} />
+                </Link>
               )}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-col items-end gap-2 shrink-0">
           {todo.status === 'open' && (
             <button
-              onClick={() => followUpTodo(todo.id, '当班经理')}
+              onClick={() => followUpTodo(todo.id, todo.assignedManager || '当班经理')}
               className="px-3 py-1.5 text-sm rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors font-medium"
             >
               标记已跟进

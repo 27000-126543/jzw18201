@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ClipboardList,
@@ -16,17 +16,20 @@ import {
   ChevronUp,
   CheckCircle2,
   User,
+  Building2,
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
 import { timeAgo } from '@/utils/time'
+import { DEPARTMENT_LABELS } from '@/types'
 
 export default function AdminLayout() {
   const todos = useHotelStore((s) => s.todos)
   const getOpenTodos = useHotelStore((s) => s.getOpenTodos)
   const followUpTodo = useHotelStore((s) => s.followUpTodo)
   const resolveTodo = useHotelStore((s) => s.resolveTodo)
+  const navigate = useNavigate()
   const [showTodoPanel, setShowTodoPanel] = useState(false)
 
   const openTodos = getOpenTodos()
@@ -100,12 +103,16 @@ export default function AdminLayout() {
                   </div>
                   <div className="flex items-center gap-2">
                     {openBadReviewTodos.slice(0, 3).map((todo) => (
-                      <span
+                      <button
                         key={todo.id}
-                        className="px-2 py-0.5 bg-white border border-amber-200 rounded text-xs text-amber-700"
+                        onClick={() => navigate('/admin/todos')}
+                        className="px-2 py-0.5 bg-white border border-amber-200 rounded text-xs text-amber-700 hover:bg-amber-100 transition-colors"
                       >
                         {todo.roomId}房 {todo.guestName}
-                      </span>
+                        {todo.assignedManager && (
+                          <span className="ml-1 text-amber-600/80">· 负责: {todo.assignedManager}</span>
+                        )}
+                      </button>
                     ))}
                     {openBadReviewTodos.length > 3 && (
                       <span className="text-xs text-amber-600">+{openBadReviewTodos.length - 3} 更多</span>
@@ -139,12 +146,19 @@ export default function AdminLayout() {
                   </div>
                   <div className="flex items-center gap-2">
                     {openTimeoutTodos.slice(0, 3).map((todo) => (
-                      <span
+                      <button
                         key={todo.id}
-                        className="px-2 py-0.5 bg-white border border-red-200 rounded text-xs text-red-700 animate-pulse"
+                        onClick={() => navigate('/admin/todos')}
+                        className="px-2 py-0.5 bg-white border border-red-200 rounded text-xs text-red-700 hover:bg-red-100 transition-colors animate-pulse"
                       >
                         {todo.roomId}房 {todo.guestName}
-                      </span>
+                        {todo.assignedManager && (
+                          <span className="ml-1 text-red-600/80">· 负责: {todo.assignedManager}</span>
+                        )}
+                        {todo.department && (
+                          <span className="ml-1 text-red-600/80">· {DEPARTMENT_LABELS[todo.department]}</span>
+                        )}
+                      </button>
                     ))}
                     {openTimeoutTodos.length > 3 && (
                       <span className="text-xs text-red-600">+{openTimeoutTodos.length - 3} 更多</span>
@@ -214,11 +228,12 @@ export default function AdminLayout() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {openTodos.slice(0, 4).map((todo) => (
-                    <div
+                    <button
                       key={todo.id}
+                      onClick={() => navigate('/admin/todos')}
                       className={cn(
-                        'bg-white rounded-lg p-3 border flex items-start gap-3',
-                        todo.type === 'timeout' ? 'border-red-200' : 'border-amber-200'
+                        'bg-white rounded-lg p-3 border flex items-start gap-3 text-left hover:shadow-md transition-all',
+                        todo.type === 'timeout' ? 'border-red-200 hover:border-red-300' : 'border-amber-200 hover:border-amber-300'
                       )}
                     >
                       <div
@@ -249,7 +264,7 @@ export default function AdminLayout() {
                             {todo.status === 'open' ? '待处理' : todo.status === 'followedUp' ? '已跟进' : '已解决'}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-hotel-muted">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-hotel-muted">
                           {todo.roomId && (
                             <span className="inline-flex items-center gap-1">
                               <User size={10} />
@@ -260,12 +275,29 @@ export default function AdminLayout() {
                             <Clock size={10} />
                             {timeAgo(todo.createdAt)}
                           </span>
+                          {todo.assignedManager && (
+                            <span className="inline-flex items-center gap-1 text-gold-700 font-medium">
+                              <User size={10} />
+                              负责: {todo.assignedManager}
+                            </span>
+                          )}
+                          {todo.handlerName && (
+                            <span className="inline-flex items-center gap-1 text-blue-700">
+                              🛠️ {todo.handlerName}
+                            </span>
+                          )}
+                          {todo.department && (
+                            <span className="inline-flex items-center gap-1 text-purple-700">
+                              <Building2 size={10} />
+                              {DEPARTMENT_LABELS[todo.department]}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         {todo.status === 'open' && (
                           <button
-                            onClick={() => followUpTodo(todo.id, '当班经理')}
+                            onClick={(e) => { e.stopPropagation(); followUpTodo(todo.id, todo.assignedManager || '当班经理') }}
                             className="p-1.5 rounded-md text-amber-600 hover:bg-amber-50 transition-colors"
                             title="标记已跟进"
                           >
@@ -274,7 +306,7 @@ export default function AdminLayout() {
                         )}
                         {todo.status !== 'resolved' && (
                           <button
-                            onClick={() => resolveTodo(todo.id)}
+                            onClick={(e) => { e.stopPropagation(); resolveTodo(todo.id) }}
                             className="p-1.5 rounded-md text-green-600 hover:bg-green-50 transition-colors"
                             title="标记已解决"
                           >
@@ -282,7 +314,7 @@ export default function AdminLayout() {
                           </button>
                         )}
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
                 {openTodos.length === 0 && (

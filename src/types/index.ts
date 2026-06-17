@@ -90,7 +90,24 @@ export interface StayRecord {
   serviceOrders: string[]
   avgRating: number
   isCurrent?: boolean
+  overallRating?: number
+  overallFeedback?: string
+  overallSubRatings?: Record<string, number>
+  overallReviewedAt?: string
+  reviewSource?: string
 }
+
+export interface OverallReview {
+  id: string
+  stayId: string
+  guestId: string
+  roomNumber: string
+  rating: number
+  feedback?: string
+  subRatings?: Record<string, number>
+  createdAt: string
+}
+
 
 export interface GuestProfile {
   id: string
@@ -115,14 +132,18 @@ export interface ManagerTodo {
   title: string
   description: string
   roomId?: string
+  guestId?: string
   guestName?: string
   orderId?: string
+  handlerName?: string
+  department?: Department
   status: TodoStatus
   createdAt: string
   followedAt?: string
   resolvedAt?: string
-  assignedManager?: string
+  assignedManager: string
   relatedRating?: number
+  sourceDetail?: string
 }
 
 export interface DepartmentInfo {
@@ -186,3 +207,11 @@ export const CATEGORY_LABELS: Record<PreferenceTag['category'], string> = {
 }
 
 export const TIMEOUT_THRESHOLD = 15
+export const DEFAULT_MANAGER = '当班经理'
+export const OVERALL_SUB_LABELS: Record<string, string> = {
+  response: '服务响应',
+  hygiene: '房间卫生',
+  dining: '餐饮质量',
+  facilities: '设施维护',
+}
+

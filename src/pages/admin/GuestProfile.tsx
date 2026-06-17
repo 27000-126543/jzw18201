@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useState, useMemo } from 'react'
+import { useParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Phone,
@@ -14,11 +14,14 @@ import {
   AlertTriangle,
   Clock,
   Home,
+  MessageSquare,
+  ExternalLink,
+  Bell,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
-import { STATUS_LABELS, SERVICE_TYPE_LABELS, CATEGORY_LABELS } from '@/types'
-import type { PreferenceTag } from '@/types'
+import { STATUS_LABELS, SERVICE_TYPE_LABELS, CATEGORY_LABELS, OVERALL_SUB_LABELS } from '@/types'
+import type { PreferenceTag, ServiceOrder, ManagerTodo } from '@/types'
 import { formatDate, formatTime } from '@/utils/time'
 import { typeIcons } from '@/data/mock'
 
@@ -34,9 +37,20 @@ export default function GuestProfile() {
   const { guestId } = useParams<{ guestId: string }>()
   const getGuestById = useHotelStore((s) => s.getGuestById)
   const getCurrentStayForGuest = useHotelStore((s) => s.getCurrentStayForGuest)
+  const getReviewsForGuest = useHotelStore((s) => s.getReviewsForGuest)
+  const getTodosByRoom = useHotelStore((s) => s.getTodosByRoom)
   const orders = useHotelStore((s) => s.orders)
   const guest = getGuestById(guestId ?? '')
   const currentStayInfo = guestId ? getCurrentStayForGuest(guestId) : null
+
+  const reviews = useMemo(() => {
+    return guestId ? getReviewsForGuest(guestId) : []
+  }, [guestId, getReviewsForGuest])
+
+  const currentTodos = useMemo(() => {
+    if (!currentStayInfo) return []
+    return getTodosByRoom(currentStayInfo.stay.roomNumber)
+  }, [currentStayInfo, getTodosByRoom])
 
   const [expandedStay, setExpandedStay] = useState<string | null>(null)
 
@@ -127,6 +141,124 @@ export default function GuestProfile() {
         </div>
       </div>
 
+      <div className="card p-6 mb-6">
+        <h3 className="text-sm font-semibold text-hotel-dark mb-4 flex items-center gap-2">
+          <MessageSquare size={14} className="text-gold-500" />
+          评价趋势
+          <span className="text-xs font-normal text-hotel-muted ml-1">（共 {reviews.length} 条评价）</span>
+        </h3>
+
+        {reviews.length === 0 ? (
+          <div className="text-sm text-hotel-muted py-8 text-center">暂无评价记录</div>
+        ) : (
+          <div className="space-y-3">
+            {reviews.map((review, idx) => {
+              const isOverall = review.type === 'overall'
+              const isBadReview = review.rating < 4
+              return (
+                <motion.div
+                  key={`${review.type}-${review.createdAt}-${idx}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.03 }}
+                  className={cn(
+                    'p-4 rounded-xl border',
+                    isBadReview
+                      ? 'bg-red-50/50 border-red-200'
+                      : isOverall
+                      ? 'bg-gold-50/40 border-gold-200'
+                      : 'bg-blue-50/40 border-blue-200'
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className={cn(
+                          'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+                          isOverall
+                            ? 'bg-gold-500 text-white'
+                            : 'bg-blue-500 text-white'
+                        )}
+                      >
+                        {isOverall ? '整体入住评价' : '单项服务评价'}
+                      </span>
+                      {isBadReview && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500 text-white">
+                          差评
+                        </span>
+                      )}
+                      <span className="text-xs text-hotel-muted">
+                        {formatDate(review.createdAt)} {formatTime(review.createdAt)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <Star
+                          key={i}
+                          size={14}
+                          className={cn(
+                            i < review.rating
+                              ? 'text-gold-500 fill-gold-500'
+                              : 'text-gray-200'
+                          )}
+                        />
+                      ))}
+                      <span className="ml-1 text-sm font-semibold text-hotel-dark">
+                        {review.rating}
+                      </span>
+                    </div>
+                  </div>
+
+                  {!isOverall && review.order && (
+                    <Link
+                      to={`/admin/order/${review.order.id}`}
+                      className="flex items-center gap-2 mb-2 text-sm text-hotel-dark hover:text-gold-600 transition-colors group"
+                    >
+                      <span className="text-lg">{typeIcons[review.order.type]}</span>
+                      <span className="font-medium">
+                        {SERVICE_TYPE_LABELS[review.order.type]}
+                      </span>
+                      <span className="text-xs text-hotel-muted">
+                        {review.order.id}
+                      </span>
+                      <ExternalLink
+                        size={12}
+                        className="text-hotel-muted group-hover:text-gold-600 transition-colors"
+                      />
+                    </Link>
+                  )}
+
+                  {isOverall && review.stay.overallSubRatings && (
+                    <div className="mb-2 p-3 rounded-lg bg-white/60 border border-hotel-border/60">
+                      <div className="text-xs font-medium text-hotel-muted mb-1.5">分项评分</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {Object.entries(review.stay.overallSubRatings).map(([key, value]) => (
+                          <div key={key} className="flex items-center justify-between text-xs">
+                            <span className="text-hotel-dark">
+                              {OVERALL_SUB_LABELS[key] || key}
+                            </span>
+                            <span className="flex items-center gap-0.5 text-gold-600 font-medium">
+                              {value}
+                              <Star size={10} className="fill-gold-500" />
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {review.feedback && (
+                    <p className="text-sm text-hotel-dark leading-relaxed">
+                      {review.feedback}
+                    </p>
+                  )}
+                </motion.div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {currentStayInfo && (
         <div className="card p-6 mb-6 border-2 border-gold-300 bg-gradient-to-br from-gold-50/50 to-white">
           <h3 className="text-sm font-semibold text-hotel-dark mb-4 flex items-center gap-2">
@@ -134,7 +266,7 @@ export default function GuestProfile() {
             当前入住
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
             <div className="p-4 rounded-xl bg-white border border-hotel-border">
               <div className="text-xs text-hotel-muted mb-1">房间号</div>
               <div className="text-2xl font-bold text-hotel-dark flex items-center gap-2">
@@ -162,7 +294,7 @@ export default function GuestProfile() {
                     {currentStats && currentStats.avgRating > 0 ? currentStats.avgRating.toFixed(1) : '—'}
                     {currentStats && currentStats.avgRating > 0 && <Star size={14} className="fill-gold-500" />}
                   </div>
-                  <div className="text-xs text-hotel-muted">平均评分</div>
+                  <div className="text-xs text-hotel-muted">服务均分</div>
                 </div>
                 <div className="w-px h-8 bg-hotel-border" />
                 <div className="text-center">
@@ -177,7 +309,60 @@ export default function GuestProfile() {
                 </div>
               </div>
             </div>
+            {currentStayInfo.stay.overallRating != null ? (
+              <div className="p-4 rounded-xl bg-gradient-to-br from-gold-50 border-2 border-gold-300">
+                <div className="text-xs text-gold-700 mb-1 font-medium">整体入住评分</div>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star
+                      key={i}
+                      size={20}
+                      className={cn(
+                        i < Math.round(currentStayInfo.stay.overallRating!)
+                          ? 'text-gold-500 fill-gold-500'
+                          : 'text-gray-200'
+                      )}
+                    />
+                  ))}
+                  <span className="ml-2 text-xl font-bold text-gold-700">
+                    {currentStayInfo.stay.overallRating}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-white border border-hotel-border">
+                <div className="text-xs text-hotel-muted mb-1">整体入住评分</div>
+                <div className="text-sm text-hotel-muted mt-2">暂无整体评价</div>
+              </div>
+            )}
           </div>
+
+          {currentTodos.length > 0 && (
+            <div className="mb-4">
+              <div className="text-xs font-medium text-hotel-muted mb-2 flex items-center gap-1">
+                <Bell size={12} className="text-red-500" />
+                本次入住相关待办（{currentTodos.length}）
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {currentTodos.map((todo) => (
+                  <Link
+                    key={todo.id}
+                    to="/admin/todos"
+                    className={cn(
+                      'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border',
+                      todo.type === 'timeout'
+                        ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                        : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                    )}
+                  >
+                    {todo.type === 'timeout' ? <AlertTriangle size={10} /> : <MessageSquare size={10} />}
+                    {todo.type === 'timeout' ? '超时' : '差评'}
+                    {todo.relatedRating && ` ${todo.relatedRating}⭐`}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <div className="text-xs font-medium text-hotel-muted mb-2">本次入住服务订单（{currentStayInfo.orders.length}）</div>
@@ -187,9 +372,10 @@ export default function GuestProfile() {
               </div>
             ) : (
               currentStayInfo.orders.map((order) => (
-                <div
+                <Link
                   key={order.id}
-                  className="flex items-center gap-3 p-3 rounded-xl bg-white border border-hotel-border hover:border-gold-300 transition-colors"
+                  to={`/admin/order/${order.id}`}
+                  className="flex items-center gap-3 p-3 rounded-xl bg-white border border-hotel-border hover:border-gold-300 transition-colors block"
                 >
                   <div className="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center text-xl shrink-0">
                     {typeIcons[order.type]}
@@ -224,8 +410,9 @@ export default function GuestProfile() {
                     )}>
                       {STATUS_LABELS[order.status]}
                     </span>
+                    <ChevronRight size={16} className="text-hotel-muted" />
                   </div>
-                </div>
+                </Link>
               ))
             )}
           </div>
@@ -301,7 +488,7 @@ export default function GuestProfile() {
       </div>
 
       <div className="card p-6 mb-6">
-        <h3 className="text-sm font-semibold text-hotel-dark mb-4">入住历史</h3>
+        <h3 className="text-sm font-semibold text-hotel-dark mb-4">入住历史时间轴</h3>
         <div className="space-y-0">
           {guest.stayHistory.map((stay, idx) => {
             const stayOrders = orders.filter((o) => stay.serviceOrders.includes(o.id))
@@ -333,7 +520,7 @@ export default function GuestProfile() {
                     )}
                   </div>
 
-                  <div className="flex-1 flex items-center gap-4 text-sm">
+                  <div className="flex-1 flex flex-wrap items-center gap-3 text-sm">
                     <span className="flex items-center gap-1 text-hotel-dark font-medium">
                       <MapPin size={12} />
                       {stay.roomNumber}房
@@ -347,15 +534,29 @@ export default function GuestProfile() {
                       <CalendarDays size={12} />
                       {formatDate(stay.checkIn)} - {formatDate(stay.checkOut)}
                     </span>
-                    {stay.avgRating > 0 && (
+                    {stay.overallRating != null ? (
+                      <span className="flex items-center gap-1 text-gold-700 font-semibold px-2 py-0.5 rounded-full bg-gold-50 border border-gold-200">
+                        本次入住整体评分:
+                        <Star size={12} className="fill-gold-500" />
+                        {stay.overallRating}
+                      </span>
+                    ) : stay.avgRating > 0 ? (
                       <span className="flex items-center gap-1 text-gold-600">
                         <Star size={12} className="fill-gold-500" />
                         {stay.avgRating}
                       </span>
-                    )}
-                    <span className="text-hotel-muted">
+                    ) : null}
+                    <Link
+                      to="#"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setExpandedStay(isExpanded ? null : stay.id)
+                      }}
+                      className="text-hotel-muted text-xs hover:text-gold-600 transition-colors inline-flex items-center gap-1"
+                    >
                       {stay.serviceOrders.length}项服务
-                    </span>
+                      <ExternalLink size={10} />
+                    </Link>
                   </div>
 
                   {isExpanded ? (
@@ -374,12 +575,16 @@ export default function GuestProfile() {
                       className="ml-6 pl-4 border-l-2 border-gold-200 overflow-hidden"
                     >
                       {stayOrders.map((order) => (
-                        <div
+                        <Link
                           key={order.id}
-                          className="flex items-center gap-3 py-2 text-sm"
+                          to={`/admin/order/${order.id}`}
+                          className="flex items-center gap-3 py-2 text-sm hover:bg-gold-50 rounded-lg px-2 -mx-2 transition-colors group"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           <span>{typeIcons[order.type]}</span>
-                          <span className="text-hotel-dark">{SERVICE_TYPE_LABELS[order.type]}</span>
+                          <span className="text-hotel-dark font-medium group-hover:text-gold-600 transition-colors">
+                            {SERVICE_TYPE_LABELS[order.type]}
+                          </span>
                           <span className="text-hotel-muted text-xs">{order.id}</span>
                           <span
                             className={cn(
@@ -400,7 +605,8 @@ export default function GuestProfile() {
                               超时
                             </span>
                           )}
-                        </div>
+                          <ExternalLink size={10} className="text-hotel-muted ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </Link>
                       ))}
                     </motion.div>
                   )}

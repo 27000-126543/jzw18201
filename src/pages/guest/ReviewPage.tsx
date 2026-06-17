@@ -5,16 +5,16 @@ import { Star, CheckCircle2, MessageSquare, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
 import { typeIcons } from '@/data/mock'
-import { SERVICE_TYPE_LABELS } from '@/types'
+import { SERVICE_TYPE_LABELS, OVERALL_SUB_LABELS } from '@/types'
 import type { ServiceOrder } from '@/types'
 
 type TabKey = 'service' | 'overall'
 
 const SUB_CATEGORIES = [
-  { key: 'serviceResponse', label: '服务响应', icon: '⚡' },
-  { key: 'roomCleanliness', label: '房间卫生', icon: '✨' },
-  { key: 'diningQuality', label: '餐饮质量', icon: '🍽️' },
-  { key: 'facilityMaintenance', label: '设施维护', icon: '🛠️' },
+  { key: 'response', label: OVERALL_SUB_LABELS.response, icon: '⚡' },
+  { key: 'hygiene', label: OVERALL_SUB_LABELS.hygiene, icon: '✨' },
+  { key: 'dining', label: OVERALL_SUB_LABELS.dining, icon: '🍽️' },
+  { key: 'facilities', label: OVERALL_SUB_LABELS.facilities, icon: '🛠️' },
 ] as const
 
 type SubCategoryKey = typeof SUB_CATEGORIES[number]['key']
@@ -45,10 +45,10 @@ export default function ReviewPage() {
 
   const [overallRating, setOverallRating] = useState(0)
   const [subRatings, setSubRatings] = useState<Record<SubCategoryKey, number>>({
-    serviceResponse: 0,
-    roomCleanliness: 0,
-    diningQuality: 0,
-    facilityMaintenance: 0,
+    response: 0,
+    hygiene: 0,
+    dining: 0,
+    facilities: 0,
   })
   const [overallFeedback, setOverallFeedback] = useState('')
   const [overallSubmitted, setOverallSubmitted] = useState(false)
@@ -219,6 +219,14 @@ export default function ReviewPage() {
             {serviceSubmitted ? (
               <div className="card p-6">
                 <SuccessAnimation subtitle="您的服务评价已提交，我们将持续改进" />
+                <div className="mt-4 text-center">
+                  <button
+                    onClick={() => setSelectedOrderId(null)}
+                    className="text-sm text-gold-600 hover:text-gold-700 font-medium"
+                  >
+                    继续评价其他服务
+                  </button>
+                </div>
               </div>
             ) : selectedOrder ? (
               <div className="space-y-4">
@@ -329,7 +337,7 @@ export default function ReviewPage() {
           >
             {overallSubmitted ? (
               <div className="card p-6">
-                <SuccessAnimation subtitle="您的入住评价已提交，期待再次为您服务" />
+                <SuccessAnimation subtitle="您的整体入住评价已记录，感谢您的宝贵反馈" />
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
