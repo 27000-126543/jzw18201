@@ -46,10 +46,15 @@ interface HotelStore extends PersistedState {
   refreshTimeoutFlags: () => void
   addPreferenceFromOrder: (guestId: string, order: ServiceOrder) => void
   addGuestOrderToStay: (guestId: string, orderId: string) => void
-  getReviewsForGuest: (guestId: string) => { stay: StayRecord; type: 'overall' | 'service'; order?: ServiceOrder; rating: number; feedback?: string; createdAt: string }[]
+  getReviewsForGuest: (guestId: string) => { stay: StayRecord; type: 'overall' | 'service'; order?: ServiceOrder; rating: number; feedback?: string; subRatings?: Record<string, number>; createdAt: string }[]
   getOverallReviewForStay: (stayId: string) => OverallReview | undefined
   getTodosByRoom: (roomId: string) => ManagerTodo[]
   getTodosByOrder: (orderId: string) => ManagerTodo[]
+  getTodosByGuest: (guestId: string) => ManagerTodo[]
+  getTodosByStay: (roomId: string, stayId: string) => ManagerTodo[]
+  getTodoStatsByDepartment: () => { department: Department; label: string; open: number; followedUp: number; resolved: number; total: number }[]
+  getTodoStatsByManager: () => { manager: string; open: number; followedUp: number; resolved: number; total: number }[]
+  getReviewsForStay: (stayId: string) => { overall?: { rating: number; feedback?: string; subRatings?: Record<string, number>; reviewedAt: string }; services: { order: ServiceOrder; rating: number; feedback?: string }[] }
 }
 
 function buildPreferenceFromOrder(order: ServiceOrder): Omit<PreferenceTag, 'id'>[] {
@@ -263,62 +268,65 @@ export const useHotelStore = create<HotelStore>()(
       submitOverallReview: (roomId, rating, feedback, subRatings) => {
         set((state) => {
           const now = new Date().toISOString()
-          const guest = state.guests.find((g) => {
-            const cur = g.stayHistory.find((s) => s.isCurrent)
-            return cur && cur.roomNumber === roomId
+          let targetGuest: typeof state.guests[number] | undefined
+          let targetStay: StayRecord | undefined
+          for (const g of state.guests) {
+            const s = g.stayHistory.find((st) => st.isCurrent && st.roomNumber === roomId)
+            if (s) {
+              targetGuest = g
+              targetStay = s
+              break
+            }
+          }
+          if (!targetGuest || !targetStay) return {}
+
+          const review: OverallReview = {
+            id: `REV-${Date.now()}`,
+            stayId: targetStay.id,
+            guestId: targetGuest.id,
+            roomNumber: roomId,
+            rating,
+            feedback,
+            subRatings,
+            createdAt: now,
+          }
+          const newReviews = [review, ...state.overallReviews]
+
+          const targetStayId = targetStay.id
+          const updatedGuests = state.guests.map((g) => {
+            if (g.id !== targetGuest!.id) return g
+            return {
+              ...g,
+              stayHistory: g.stayHistory.map((s) =>
+                s.id === targetStayId
+                  ? {
+                      ...s,
+                      overallRating: rating,
+                      overallFeedback: feedback,
+                      overallSubRatings: subRatings,
+                      overallReviewedAt: now,
+                      reviewSource: 'guest',
+                    }
+                  : s
+              ),
+            }
           })
-          const currentStay = guest?.stayHistory.find((s) => s.isCurrent)
-          let newReviews = state.overallReviews
+
           let newTodos = state.todos
-          let updatedGuests = state.guests
-
-          if (guest && currentStay) {
-            const review: OverallReview = {
-              id: `REV-${Date.now()}`,
-              stayId: currentStay.id,
-              guestId: guest.id,
-              roomNumber: roomId,
-              rating,
-              feedback,
-              subRatings,
-              createdAt: now,
-            }
-            newReviews = [review, ...state.overallReviews]
-
-            updatedGuests = state.guests.map((g) => {
-              if (g.id !== guest.id) return g
-              return {
-                ...g,
-                stayHistory: g.stayHistory.map((s) =>
-                  s.isCurrent
-                    ? {
-                        ...s,
-                        overallRating: rating,
-                        overallFeedback: feedback,
-                        overallSubRatings: subRatings,
-                        overallReviewedAt: now,
-                        reviewSource: 'guest',
-                      }
-                    : s
-                ),
-              }
-            })
-
-            if (rating < 4) {
-              newTodos = [
-                buildTodo({
-                  type: 'badReview',
-                  title: `${roomId}房 整体入住${rating}星差评`,
-                  description: `${guest.name} 对本次入住给出${rating}星：${feedback || '无文字反馈'}`,
-                  roomId,
-                  guestId: guest.id,
-                  guestName: guest.name,
-                  relatedRating: rating,
-                  sourceDetail: `整体入住评价(${rating}星)：${feedback || '客人不满意'}`,
-                }),
-                ...state.todos,
-              ]
-            }
+          if (rating < 4) {
+            newTodos = [
+              buildTodo({
+                type: 'badReview',
+                title: `${roomId}房 整体入住${rating}星差评`,
+                description: `${targetGuest.name} 对${roomId}房入住给出${rating}星：${feedback || '无文字反馈'}`,
+                roomId,
+                guestId: targetGuest.id,
+                guestName: targetGuest.name,
+                relatedRating: rating,
+                sourceDetail: `整体入住评价(${rating}星)：${feedback || '客人不满意'}`,
+              }),
+              ...state.todos,
+            ]
           }
           return { overallReviews: newReviews, guests: updatedGuests, todos: newTodos }
         })
@@ -504,10 +512,10 @@ export const useHotelStore = create<HotelStore>()(
         })),
 
       getReviewsForGuest: (guestId) => {
-        const { orders, guests, overallReviews } = get()
+        const { orders, guests } = get()
         const guest = guests.find((g) => g.id === guestId)
         if (!guest) return []
-        const result: { stay: StayRecord; type: 'overall' | 'service'; order?: ServiceOrder; rating: number; feedback?: string; createdAt: string }[] = []
+        const result: { stay: StayRecord; type: 'overall' | 'service'; order?: ServiceOrder; rating: number; feedback?: string; subRatings?: Record<string, number>; createdAt: string }[] = []
         guest.stayHistory.forEach((stay) => {
           if (stay.overallRating != null && stay.overallReviewedAt) {
             result.push({
@@ -515,6 +523,7 @@ export const useHotelStore = create<HotelStore>()(
               type: 'overall',
               rating: stay.overallRating,
               feedback: stay.overallFeedback,
+              subRatings: stay.overallSubRatings,
               createdAt: stay.overallReviewedAt,
             })
           }
@@ -532,7 +541,6 @@ export const useHotelStore = create<HotelStore>()(
             }
           })
         })
-        const _ = overallReviews
         return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       },
 
@@ -541,6 +549,67 @@ export const useHotelStore = create<HotelStore>()(
       getTodosByRoom: (roomId) => get().todos.filter((t) => t.roomId === roomId),
 
       getTodosByOrder: (orderId) => get().todos.filter((t) => t.orderId === orderId),
+
+      getTodosByGuest: (guestId) => get().todos.filter((t) => t.guestId === guestId),
+
+      getTodosByStay: (roomId, _stayId) => get().todos.filter((t) => t.roomId === roomId),
+
+      getTodoStatsByDepartment: () => {
+        const { todos } = get()
+        const deptList: Department[] = ['housekeeping', 'fandb', 'engineering']
+        return deptList.map((dept) => {
+          const deptTodos = todos.filter((t) => t.department === dept)
+          return {
+            department: dept,
+            label: DEPARTMENT_LABELS[dept],
+            open: deptTodos.filter((t) => t.status === 'open').length,
+            followedUp: deptTodos.filter((t) => t.status === 'followedUp').length,
+            resolved: deptTodos.filter((t) => t.status === 'resolved').length,
+            total: deptTodos.length,
+          }
+        })
+      },
+
+      getTodoStatsByManager: () => {
+        const { todos } = get()
+        const map = new Map<string, { manager: string; open: number; followedUp: number; resolved: number; total: number }>()
+        todos.forEach((t) => {
+          const key = t.assignedManager
+          if (!map.has(key)) {
+            map.set(key, { manager: key, open: 0, followedUp: 0, resolved: 0, total: 0 })
+          }
+          const entry = map.get(key)!
+          entry.total++
+          if (t.status === 'open') entry.open++
+          else if (t.status === 'followedUp') entry.followedUp++
+          else if (t.status === 'resolved') entry.resolved++
+        })
+        return Array.from(map.values())
+      },
+
+      getReviewsForStay: (stayId) => {
+        const { orders, guests, overallReviews } = get()
+        const guest = guests.find((g) => g.stayHistory.some((s) => s.id === stayId))
+        const stay = guest?.stayHistory.find((s) => s.id === stayId)
+        if (!stay) return { services: [] }
+
+        const overallReview = overallReviews.find((r) => r.stayId === stayId)
+        const overall = stay.overallRating != null
+          ? { rating: stay.overallRating, feedback: stay.overallFeedback, subRatings: stay.overallSubRatings, reviewedAt: stay.overallReviewedAt! }
+          : overallReview
+            ? { rating: overallReview.rating, feedback: overallReview.feedback, subRatings: overallReview.subRatings, reviewedAt: overallReview.createdAt }
+            : undefined
+
+        const services: { order: ServiceOrder; rating: number; feedback?: string }[] = []
+        stay.serviceOrders.forEach((oid) => {
+          const order = orders.find((o) => o.id === oid)
+          if (order && order.rating != null && order.reviewType === 'service') {
+            services.push({ order, rating: order.rating, feedback: order.feedback })
+          }
+        })
+
+        return { overall, services }
+      },
     }),
     {
       name: STORAGE_KEY,

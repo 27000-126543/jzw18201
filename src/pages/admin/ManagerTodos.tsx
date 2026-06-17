@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import {
@@ -7,11 +8,11 @@ import {
   CheckCircle2,
   Clock,
   User,
-  ArrowRightLeft,
   ExternalLink,
   Building2,
-  Wrench,
   FileText,
+  Filter,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
@@ -64,18 +65,18 @@ function TodoCard({ todo }: { todo: ManagerTodo }) {
               <div className="flex items-center gap-4 flex-wrap text-xs">
                 <span className="inline-flex items-center gap-1 text-gold-700 font-medium">
                   <User size={12} />
-                  👤 责任人: {todo.assignedManager}
+                  责任人: {todo.assignedManager}
                 </span>
                 {todo.orderId && todo.handlerName && (
                   <span className="inline-flex items-center gap-1 text-blue-700">
-                    <Wrench size={12} />
-                    🛠️ 处理人: {todo.handlerName}
+                    <Building2 size={12} />
+                    处理人: {todo.handlerName}
                   </span>
                 )}
                 {todo.department && (
                   <span className="inline-flex items-center gap-1 text-purple-700">
                     <Building2 size={12} />
-                    🏢 责任部门: {DEPARTMENT_LABELS[todo.department]}
+                    责任部门: {DEPARTMENT_LABELS[todo.department]}
                   </span>
                 )}
                 {todo.roomId && (
@@ -98,7 +99,7 @@ function TodoCard({ todo }: { todo: ManagerTodo }) {
                 <div className="text-xs text-hotel-muted/80 bg-gray-50 rounded-lg px-3 py-2 border border-hotel-border/60">
                   <span className="inline-flex items-center gap-1">
                     <FileText size={11} />
-                    📝 来源线索: {todo.sourceDetail}
+                    来源线索: {todo.sourceDetail}
                   </span>
                 </div>
               )}
@@ -154,13 +155,52 @@ function TodoCard({ todo }: { todo: ManagerTodo }) {
 
 export default function ManagerTodos() {
   const todos = useHotelStore((s) => s.todos)
-  const getOpenTodos = useHotelStore((s) => s.getOpenTodos)
+  const getFilteredTodos = useHotelStore((s) => s.getFilteredTodos)
 
-  const openTodos = getOpenTodos()
-  const timeoutTodos = openTodos.filter((t) => t.type === 'timeout')
-  const badReviewTodos = openTodos.filter((t) => t.type === 'badReview')
-  const urgentTodos = openTodos.filter((t) => t.type === 'urgent')
-  const resolvedTodos = todos.filter((t) => t.status === 'resolved')
+  const [filterGuest, setFilterGuest] = useState<string>('all')
+  const [filterRoom, setFilterRoom] = useState<string>('all')
+  const [filterType, setFilterType] = useState<TodoType | 'all'>('all')
+  const [filterStatus, setFilterStatus] = useState<TodoStatus | 'all'>('all')
+
+  const uniqueGuests = useMemo(() => {
+    const map = new Map<string, string>()
+    todos.forEach((t) => {
+      if (t.guestId && t.guestName && !map.has(t.guestId)) {
+        map.set(t.guestId, t.guestName)
+      }
+    })
+    return Array.from(map.entries())
+  }, [todos])
+
+  const uniqueRooms = useMemo(() => {
+    const rooms = new Set<string>()
+    todos.forEach((t) => {
+      if (t.roomId) rooms.add(t.roomId)
+    })
+    return Array.from(rooms).sort()
+  }, [todos])
+
+  const filteredTodos = useMemo(() => {
+    if (filterGuest === 'all' && filterRoom === 'all' && filterType === 'all' && filterStatus === 'all') {
+      return todos
+    }
+    return getFilteredTodos({
+      roomId: filterRoom !== 'all' ? filterRoom : undefined,
+      type: filterType,
+      status: filterStatus,
+    }).filter((t) => {
+      if (filterGuest !== 'all' && t.guestId !== filterGuest) return false
+      return true
+    })
+  }, [todos, filterGuest, filterRoom, filterType, filterStatus, getFilteredTodos])
+
+  const timeoutTodos = filteredTodos.filter((t) => t.type === 'timeout' && t.status !== 'resolved')
+  const badReviewTodos = filteredTodos.filter((t) => t.type === 'badReview' && t.status !== 'resolved')
+  const urgentTodos = filteredTodos.filter((t) => t.type === 'urgent' && t.status !== 'resolved')
+  const openTodos = filteredTodos.filter((t) => t.status !== 'resolved')
+  const resolvedTodos = filteredTodos.filter((t) => t.status === 'resolved')
+
+  const hasActiveFilters = filterGuest !== 'all' || filterRoom !== 'all' || filterType !== 'all' || filterStatus !== 'all'
 
   return (
     <div className="space-y-6">
@@ -185,6 +225,71 @@ export default function ManagerTodos() {
             <div className="text-xs text-green-600">已解决</div>
             <div className="text-2xl font-bold text-green-700">{resolvedTodos.length}</div>
           </div>
+        </div>
+      </div>
+
+      <div className="card p-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Filter size={16} className="text-hotel-muted shrink-0" />
+          <select
+            value={filterGuest}
+            onChange={(e) => setFilterGuest(e.target.value)}
+            className="text-sm border border-hotel-border rounded-lg px-3 py-1.5 bg-white text-hotel-dark focus:outline-none focus:ring-2 focus:ring-gold-300"
+          >
+            <option value="all">全部客人</option>
+            {uniqueGuests.map(([id, name]) => (
+              <option key={id} value={id}>{name}</option>
+            ))}
+          </select>
+          <select
+            value={filterRoom}
+            onChange={(e) => setFilterRoom(e.target.value)}
+            className="text-sm border border-hotel-border rounded-lg px-3 py-1.5 bg-white text-hotel-dark focus:outline-none focus:ring-2 focus:ring-gold-300"
+          >
+            <option value="all">全部房间</option>
+            {uniqueRooms.map((room) => (
+              <option key={room} value={room}>{room}房</option>
+            ))}
+          </select>
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value as TodoType | 'all')}
+            className="text-sm border border-hotel-border rounded-lg px-3 py-1.5 bg-white text-hotel-dark focus:outline-none focus:ring-2 focus:ring-gold-300"
+          >
+            <option value="all">全部类型</option>
+            <option value="timeout">超时预警</option>
+            <option value="badReview">差评跟进</option>
+            <option value="urgent">紧急事项</option>
+          </select>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as TodoStatus | 'all')}
+            className="text-sm border border-hotel-border rounded-lg px-3 py-1.5 bg-white text-hotel-dark focus:outline-none focus:ring-2 focus:ring-gold-300"
+          >
+            <option value="all">全部状态</option>
+            <option value="open">待处理</option>
+            <option value="followedUp">已跟进</option>
+            <option value="resolved">已解决</option>
+          </select>
+          {hasActiveFilters && (
+            <button
+              onClick={() => {
+                setFilterGuest('all')
+                setFilterRoom('all')
+                setFilterType('all')
+                setFilterStatus('all')
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors font-medium"
+            >
+              <X size={12} />
+              清除筛选
+            </button>
+          )}
+          {hasActiveFilters && (
+            <span className="text-xs text-hotel-muted">
+              筛选结果: {filteredTodos.length} / {todos.length} 条
+            </span>
+          )}
         </div>
       </div>
 

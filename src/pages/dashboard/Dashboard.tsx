@@ -15,6 +15,8 @@ import {
   User,
   Building2,
   Zap,
+  Users,
+  RotateCcw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHotelStore } from '@/store/hotel'
@@ -23,6 +25,7 @@ import {
   DEPARTMENT_LABELS,
   type TodoType,
   type TodoStatus,
+  type Department,
 } from '@/types'
 import { timeAgo } from '@/utils/time'
 import { typeIcons } from '@/data/mock'
@@ -75,6 +78,8 @@ export default function Dashboard() {
   const getDepartmentStats = useHotelStore((s) => s.getDepartmentStats)
   const getTimeoutCount = useHotelStore((s) => s.getTimeoutCount)
   const getFilteredTodos = useHotelStore((s) => s.getFilteredTodos)
+  const getTodoStatsByDepartment = useHotelStore((s) => s.getTodoStatsByDepartment)
+  const getTodoStatsByManager = useHotelStore((s) => s.getTodoStatsByManager)
   const refreshTimeoutFlags = useHotelStore((s) => s.refreshTimeoutFlags)
   const orders = useHotelStore((s) => s.orders)
   const todos = useHotelStore((s) => s.todos)
@@ -84,10 +89,15 @@ export default function Dashboard() {
   const avgMin = getAvgResponseMin()
   const deptStats = getDepartmentStats()
   const timeoutCount = getTimeoutCount()
+  const deptTodoStats = getTodoStatsByDepartment()
+  const managerTodoStats = getTodoStatsByManager()
 
   const [filterRoomId, setFilterRoomId] = useState<string>('all')
   const [filterType, setFilterType] = useState<TodoType | 'all'>('all')
   const [filterStatus, setFilterStatus] = useState<TodoStatus | 'all'>('all')
+  const [filterDepartment, setFilterDepartment] = useState<Department | null>(null)
+  const [filterManager, setFilterManager] = useState<string | null>(null)
+  const [dispositionTab, setDispositionTab] = useState<'department' | 'manager'>('department')
   const [showFollowedUp, setShowFollowedUp] = useState(true)
   const [showResolved, setShowResolved] = useState(false)
   const [showPendingTimeoutOnly, setShowPendingTimeoutOnly] = useState(false)
@@ -124,8 +134,12 @@ export default function Dashboard() {
       roomId: filterRoomId === 'all' ? undefined : filterRoomId,
       type: filterType,
       status: filterStatus,
+    }).filter((t) => {
+      if (filterDepartment && t.department !== filterDepartment) return false
+      if (filterManager && t.assignedManager !== filterManager) return false
+      return true
     })
-  }, [getFilteredTodos, filterRoomId, filterType, filterStatus])
+  }, [getFilteredTodos, filterRoomId, filterType, filterStatus, filterDepartment, filterManager])
 
   const visibleTodos = useMemo(() => {
     return dropdownFilteredTodos.filter((t) => {
@@ -144,12 +158,13 @@ export default function Dashboard() {
   }, [orders, showPendingTimeoutOnly])
 
   const statusCounts = useMemo(() => {
+    const source = dropdownFilteredTodos
     return {
-      open: todos.filter((t) => t.status === 'open').length,
-      followedUp: todos.filter((t) => t.status === 'followedUp').length,
-      resolved: todos.filter((t) => t.status === 'resolved').length,
+      open: source.filter((t) => t.status === 'open').length,
+      followedUp: source.filter((t) => t.status === 'followedUp').length,
+      resolved: source.filter((t) => t.status === 'resolved').length,
     }
-  }, [todos])
+  }, [dropdownFilteredTodos])
 
   useEffect(() => {
     if (visibleTodos.length === 0) return
@@ -193,6 +208,16 @@ export default function Dashboard() {
 
   const totalDeptLoad = deptStats.reduce((s, d) => s + d.pending + d.inProgress, 0)
   const maxAvgResponse = Math.max(...deptStats.map((d) => d.avgResponseMin), 1)
+
+  const hasActiveFilter = filterDepartment !== null || filterManager !== null || filterRoomId !== 'all' || filterType !== 'all' || filterStatus !== 'all'
+
+  function clearAllFilters() {
+    setFilterRoomId('all')
+    setFilterType('all')
+    setFilterStatus('all')
+    setFilterDepartment(null)
+    setFilterManager(null)
+  }
 
   let arcOffset = 0
 
@@ -293,6 +318,15 @@ export default function Dashboard() {
               />
               <span className={cn(showResolved ? 'text-gray-300' : 'text-gray-500')}>显示已解决</span>
             </label>
+            {hasActiveFilter && (
+              <button
+                onClick={clearAllFilters}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-gold-600/20 text-gold-400 border border-gold-600/40 hover:bg-gold-600/30 transition-colors"
+              >
+                <RotateCcw size={12} />
+                清除筛选
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -456,6 +490,142 @@ export default function Dashboard() {
           </div>
         </motion.div>
       </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8 bg-gray-800 rounded-2xl p-6 border border-gold-700/30"
+      >
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <BarChart3 size={18} className="text-gold-400" />
+            <h2 className="text-base font-semibold text-gold-400">预警处置概览</h2>
+          </div>
+          <div className="flex items-center gap-1 bg-gray-900 rounded-lg p-1">
+            <button
+              onClick={() => setDispositionTab('department')}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                dispositionTab === 'department'
+                  ? 'bg-gold-600/30 text-gold-400 border border-gold-600/50'
+                  : 'text-gray-500 hover:text-gray-300'
+              )}
+            >
+              <Building2 size={12} className="inline mr-1" />
+              按部门
+            </button>
+            <button
+              onClick={() => setDispositionTab('manager')}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                dispositionTab === 'manager'
+                  ? 'bg-gold-600/30 text-gold-400 border border-gold-600/50'
+                  : 'text-gray-500 hover:text-gray-300'
+              )}
+            >
+              <Users size={12} className="inline mr-1" />
+              按经理
+            </button>
+          </div>
+        </div>
+
+        {dispositionTab === 'department' && (
+          <div className="grid grid-cols-3 gap-4">
+            {deptTodoStats.map((dept) => {
+              const isActive = filterDepartment === dept.department
+              const total = dept.total || 1
+              const openPct = (dept.open / total) * 100
+              const followedPct = (dept.followedUp / total) * 100
+              const resolvedPct = (dept.resolved / total) * 100
+              return (
+                <button
+                  key={dept.department}
+                  onClick={() => setFilterDepartment(isActive ? null : dept.department)}
+                  className={cn(
+                    'text-left p-4 rounded-xl border transition-all hover:brightness-110',
+                    isActive
+                      ? 'bg-gold-900/20 border-gold-500/60 shadow-lg shadow-gold-900/10'
+                      : 'bg-gray-750 border-gray-700 hover:border-gray-600'
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-white">{dept.label}</span>
+                    <span className="text-xs text-gray-500">{dept.total} 条</span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-700 text-red-100">
+                      待处理 {dept.open}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-700 text-amber-100">
+                      已跟进 {dept.followedUp}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-700 text-green-100">
+                      已解决 {dept.resolved}
+                    </span>
+                  </div>
+                  <div className="h-2.5 bg-gray-700 rounded-full overflow-hidden flex">
+                    <div
+                      className="h-full bg-red-500 transition-all duration-500"
+                      style={{ width: `${openPct}%` }}
+                    />
+                    <div
+                      className="h-full bg-amber-500 transition-all duration-500"
+                      style={{ width: `${followedPct}%` }}
+                    />
+                    <div
+                      className="h-full bg-green-500 transition-all duration-500"
+                      style={{ width: `${resolvedPct}%` }}
+                    />
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {dispositionTab === 'manager' && (
+          <div className="space-y-2">
+            {managerTodoStats.map((mgr) => {
+              const isActive = filterManager === mgr.manager
+              return (
+                <button
+                  key={mgr.manager}
+                  onClick={() => setFilterManager(isActive ? null : mgr.manager)}
+                  className={cn(
+                    'w-full text-left flex items-center gap-4 p-3 rounded-xl border transition-all hover:brightness-110',
+                    isActive
+                      ? 'bg-gold-900/20 border-gold-500/60 shadow-lg shadow-gold-900/10'
+                      : 'bg-gray-750 border-gray-700 hover:border-gray-600'
+                  )}
+                >
+                  <div className="flex items-center gap-2 min-w-[120px]">
+                    <div className={cn(
+                      'w-8 h-8 rounded-lg flex items-center justify-center',
+                      isActive ? 'bg-gold-600/30' : 'bg-gray-700'
+                    )}>
+                      <User size={14} className={isActive ? 'text-gold-400' : 'text-gray-400'} />
+                    </div>
+                    <span className="text-sm font-medium text-white">{mgr.manager}</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-700 text-red-100">
+                    待处理 {mgr.open}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-700 text-amber-100">
+                    已跟进 {mgr.followedUp}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-700 text-green-100">
+                    已解决 {mgr.resolved}
+                  </span>
+                  <span className="ml-auto text-xs text-gray-500">{mgr.total} 条</span>
+                </button>
+              )
+            })}
+            {managerTodoStats.length === 0 && (
+              <div className="text-center py-6 text-gray-500 text-sm">暂无经理待办数据</div>
+            )}
+          </div>
+        )}
+      </motion.div>
 
       <div className="grid grid-cols-5 gap-6 mb-8">
         <div className="col-span-3 space-y-6">
