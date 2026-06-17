@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: #FAF8F5;
+  color: #2C2C2C;
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .btn-gold {
+    @apply bg-gold-500 text-white rounded-lg px-6 py-3 font-medium
+           hover:bg-gold-600 hover:-translate-y-0.5 hover:shadow-lg
+           active:translate-y-0 active:shadow-md
+           transition-all duration-200 ease-out;
+  }
+
+  .btn-outline {
+    @apply border-2 border-gold-500 text-gold-600 rounded-lg px-6 py-3 font-medium
+           hover:bg-gold-50 hover:-translate-y-0.5
+           active:translate-y-0
+           transition-all duration-200 ease-out;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-hotel-border
+           hover:shadow-md transition-shadow duration-200;
+  }
+
+  .badge-pending {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+           bg-hotel-coral/10 text-hotel-coral;
+  }
+
+  .badge-accepted {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+           bg-gold-100 text-gold-700;
+  }
+
+  .badge-progress {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+           bg-blue-50 text-blue-600;
+  }
+
+  .badge-completed {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+           bg-hotel-green/10 text-hotel-green;
+  }
+
+  .badge-cancelled {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+           bg-gray-100 text-gray-500;
+  }
+
+  .section-title {
+    @apply font-display text-2xl font-semibold text-hotel-dark;
+  }
+
+  .guest-layout {
+    @apply min-h-screen bg-hotel-bg pb-24;
+  }
+
+  .admin-layout {
+    @apply min-h-screen bg-gray-50;
+  }
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: #E8E4DE;
+  border-radius: 3px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #C9A96E;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 2s ease-in-out infinite;
+}
+
+@keyframes slide-up {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.4s ease-out;
+}
